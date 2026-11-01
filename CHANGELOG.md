@@ -2,6 +2,29 @@
 
 倒序记录。每轮迭代追加：`## 日期 · 第N轮：一句话主题`，末尾写「当前状态 / 下一步 / 未验证」。
 
+## 2026-11-02 · 第6轮：端到端打通（`keyconfigs.update()` 是缺失的一环）
+
+### 结论
+- 真实按键 → 分发器 → 目标操作，**首次完整验证通过**：
+  - 分发器日志：`enter binding=bd_a area=VIEW_3D` → `called wm.context_toggle -> {'FINISHED'}`
+  - 探针判定：`运行时按键链路可用 hit=['A']`（按 F8 触发），随后自动复原并退出。
+- 根因：向 keyconfig 新增条目后必须调用 **`wm.keyconfigs.update()`** 重新合并键位层，否则条目"存在但不会被事件系统使用"——这解释了此前所有"按了没反应"。
+- 副作用（已记录）：`update()` 会把条目**镜像进 `Blender user` 层**（同一 keymap 出现两份）。`purge()/unapply()` 按 `owned.json` 签名跨层清理，重复应用前先清理，测试 49/49 仍全绿。
+
+### 附带改动
+- `_deferred()` 增加幂等保护：启动时已应用过且无 journal 残留时**不再 purge 重建**（重建会打断已生效的条目）。
+- 新增 `PIEBIND_NO_DEFERRED` 环境变量，供探针隔离定时器影响。
+- 新增 `tests/gui_probe_final.py`（双键端到端探针）、`gui_probe_direct.py`（直调分发器）、`gui_probe_layers.py`（分层诊断）等验证脚本。
+
+### 当前状态
+- v0.1 逻辑层 + GUI 按键链路**全部验证通过**；扩展包可构建可安装。
+- 未验证：Blender 4.2 兼容、GitHub Actions 实跑、卸载后重启的残留检查（有测试覆盖但未做真实重启）。
+
+### 下一步
+1. 推 GitHub（仓库地址 + tag + Release 挂 zip）。
+2. CI 首跑排查（4.2 最可能出问题）。
+3. 真实安装后重启一次，确认无残留。
+
 ## 2026-11-02 · 第5轮：运行时绑定改挂 Window 层 + 分发器；修掉三个真 bug；49 项测试全绿
 
 ### 关键发现（实测）

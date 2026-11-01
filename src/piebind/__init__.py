@@ -10,6 +10,7 @@ bl_info = {
     "category": "Interface",
 }
 
+import os
 import traceback
 
 import bpy
@@ -28,10 +29,17 @@ def log(message):
 
 def _deferred():
     """延迟应用：注册时 keyconfig 可能尚未加载完成。"""
+    if os.environ.get("PIEBIND_NO_DEFERRED"):
+        return None
     try:
         healed = ke.reconcile_journal()
         if healed.get("restored"):
             log(f"journal 自愈：恢复 {healed['restored']} 条键位")
+        # 已在启动时应用过且没有需要自愈的残留：不要 purge 重建
+        # （实测：运行中途重建的条目不会被事件系统接管，表现为按键无反应）
+        if ke.APPLIED.get("items") and not healed.get("restored"):
+            log("绑定已应用，跳过重复应用")
+            return None
         data = config.load()
         report = ke.apply(data)
         log(

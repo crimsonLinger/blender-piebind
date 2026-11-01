@@ -680,6 +680,11 @@ def apply(data, dry_run=False):
         config.write_journal({"version": 1, "entries": _journal_entries(muted)})
     else:
         config.clear_journal()
+    # 让键位层重新合并一次；否则运行中途新增的条目可能不参与分发
+    try:
+        bpy.context.window_manager.keyconfigs.update()
+    except Exception:
+        pass
     return report
 
 
