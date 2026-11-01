@@ -428,7 +428,6 @@ class PIEBIND_OT_capture_key(bpy.types.Operator):
 
     def invoke(self, context, event):
         wm = context.window_manager
-        self._armed_at = time.time() + 0.05
         wm.piebind_capture_label = "请按下组合键…（Esc 取消）"
         _set_status(context, "PieBind：请按下组合键…")
         context.window_manager.modal_handler_add(self)
@@ -448,6 +447,12 @@ class PIEBIND_OT_capture_key(bpy.types.Operator):
             wm.piebind_capture_label = f"已改键：{label}"
         else:
             wm.piebind_capture_label = label
+        if log_path:
+            try:
+                with open(log_path, "a", encoding="utf-8") as fh:
+                    fh.write(f"CAPTURED {key.get('type')} {label}\n")
+            except Exception:
+                pass
         _clear_status(context)
         return {"FINISHED"}
 
@@ -461,10 +466,10 @@ class PIEBIND_OT_capture_key(bpy.types.Operator):
                              f"a={event.alt}\n")
             except Exception:
                 pass
-        # 刚点下按钮的 50ms 内忽略（避免把点击的余波当成按键）
-        if time.time() < getattr(self, "_armed_at", 0):
-            return {"RUNNING_MODAL"}
         if event.value not in ("PRESS", "CLICK", "DOUBLE_CLICK"):
+            return {"RUNNING_MODAL"}
+        if event.type in ("MOUSEMOVE", "INBETWEEN_MOUSEMOVE", "TIMER", "TIMER_REPORT",
+                          "WINDOW_DEACTIVATE", "WINDOW_ACTIVATE"):
             return {"RUNNING_MODAL"}
         if event.type in CANCEL_EVENTS:
             context.window_manager.piebind_capture_label = "已取消"
