@@ -9,6 +9,7 @@ import json
 import os
 import sys
 import tempfile
+import time
 import traceback
 
 import bpy
@@ -236,6 +237,23 @@ def main():
         check("操作符枚举可用", len(op_items) >= 1, len(op_items))
     except Exception as exc:
         check("操作符枚举可用", False, exc)
+
+    section("中文搜索")
+    _t0 = time.perf_counter()
+    _rows = ke.operator_index()
+    _dt = (time.perf_counter() - _t0) * 1000
+    print(f"  [perf] 操作符索引 {len(_rows)} 条，构建/加载 {_dt:.0f} ms")
+    check("索引非空", len(_rows) > 1000, len(_rows))
+    en_hits = ke.search_operators("bevel", limit=5)
+    check("英文关键词可搜", len(en_hits) > 0, en_hits)
+    locale = getattr(bpy.app.translations, "locale", "en") or "en"
+    if locale.lower().startswith("zh"):
+        zh_hits = ke.search_operators("倒角", limit=5)
+        check("中文关键词可搜到倒角", "mesh.bevel" in zh_hits, zh_hits)
+        check("中文标签可用", ke.operator_label_zh("mesh.bevel") != "Bevel",
+              ke.operator_label_zh("mesh.bevel"))
+    else:
+        print(f"  SKIP 中文搜索（当前语言 {locale}）")
 
     section("API")
     described = api.call("describe")

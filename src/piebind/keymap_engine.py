@@ -186,10 +186,18 @@ _MENU_BASES = ("Menu", "Panel", "Operator", "Header")
 
 def invalidate_cache():
     """插件启停 / 文件加载后清缓存（新操作符可能刚注册）。"""
+    global _OP_INDEX, _OP_INDEX_BY_ID
     _OP_CACHE["map"] = None
     _OP_CACHE["classes"] = None
     _OP_CACHE["ids"] = None
     _OP_CACHE["labels"].clear()
+    _OP_INDEX = None
+    _OP_INDEX_BY_ID = None
+    try:
+        import os as _os
+        _os.remove(_index_path())
+    except Exception:
+        pass
 
 
 def _operator_map():
@@ -302,12 +310,84 @@ def iter_operator_ids():
     return iter(_OP_CACHE["ids"])
 
 
-def search_operators(query="", limit=40):
-    query = (query or "").strip().lower()
-    hits = []
+# ------------------------------------------------------------------ op index
+# 中文搜索需要「id -> 英文名 -> 本地化名」的索引；一次性构建后缓存到磁盘。
+_OP_INDEX = None
+_OP_INDEX_BY_ID = None
+
+
+def _index_path():
+    locale = getattr(bpy.app.translations, "locale", "en") or "en"
+    return config.path_of(f"op_index_{bpy.app.version_string}_{locale}.json")
+
+
+def _build_index():
+    rows = []
     for idname in iter_operator_ids():
-        if query and query not in idname.lower():
-            continue
+        english = idname
+        try:
+            mod_name, op_name = idname.split(".", 1)
+            op = getattr(getattr(bpy.ops, mod_name), op_name)
+            english = op.get_rna_type().name or idname
+        except Exception:
+            pass
+        localized = english
+        try:
+            localized = bpy.app.translations.pgettext_iface(english) or english
+        except Exception:
+            pass
+        rows.append([idname, english, localized])
+    return rows
+
+
+def operator_index():
+    global _OP_INDEX, _OP_INDEX_BY_ID
+    if _OP_INDEX is not None:
+        return _OP_INDEX
+    path = _index_path()
+    try:
+        import json as _json
+        with open(path, "r", encoding="utf-8") as fh:
+            payload = _json.load(fh)
+        rows = payload.get("rows") or []
+        if rows:
+            _OP_INDEX = rows
+            _OP_INDEX_BY_ID = {row[0]: row for row in rows}
+            return _OP_INDEX
+    except Exception:
+        pass
+    _OP_INDEX = _build_index()
+    _OP_INDEX_BY_ID = {row[0]: row for row in _OP_INDEX}
+    try:
+        import json as _json
+        with open(path, "w", encoding="utf-8") as fh:
+            _json.dump({
+                "version": bpy.app.version_string,
+                "locale": getattr(bpy.app.translations, "locale", "en"),
+                "rows": _OP_INDEX,
+            }, fh, ensure_ascii=False)
+    except Exception:
+        pass
+    return _OP_INDEX
+
+
+def operator_label_zh(idname):
+    operator_index()
+    row = _OP_INDEX_BY_ID.get(idname) if _OP_INDEX_BY_ID else None
+    if row and row[2]:
+        return row[2]
+    return operator_label(idname)
+
+
+def search_operators(query="", limit=40):
+    q = (query or "").strip().casefold()
+    hits = []
+    for idname, english, localized in operator_index():
+        if q:
+            if (q not in idname.casefold()
+                    and q not in str(english).casefold()
+                    and q not in str(localized).casefold()):
+                continue
         hits.append(idname)
         if len(hits) >= limit:
             break

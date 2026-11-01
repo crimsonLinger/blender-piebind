@@ -38,7 +38,7 @@ def _draw_slot(layout, slot, context):
         return
 
     idname = slot.get("idname") or ""
-    text = slot.get("text") or ke.operator_label(idname)
+    text = slot.get("text") or ke.operator_label_zh(idname)
     icon = slot.get("icon") or "NONE"
 
     if not ke.has_operator(idname):

@@ -38,7 +38,7 @@ def _worst(occupants):
 
 
 def _draw_operator_picker(layout, wm):
-    """搜索 + 结果按钮 + 手填字段；不依赖动态枚举。"""
+    """搜索 + 结果按钮 + 手填字段；支持中文（用 Blender 的 UI 翻译）。"""
     layout.prop(wm, "piebind_op_query", text="搜索")
     hits = ke.search_operators(wm.piebind_op_query, limit=6)
     if hits:
@@ -46,12 +46,12 @@ def _draw_operator_picker(layout, wm):
         for idn in hits:
             op = col.operator(
                 "piebind.pick_operator",
-                text=f"{ke.operator_label(idn)} - {idn}",
+                text=f"{ke.operator_label_zh(idn)} - {idn}",
             )
             op.idname = idn
     chosen = getattr(wm, "piebind_op_choice", "")
     if chosen and ke.has_operator(chosen):
-        layout.label(text=f"已选：{ke.operator_label(chosen)}", icon="CHECKMARK")
+        layout.label(text=f"已选：{ke.operator_label_zh(chosen)}", icon="CHECKMARK")
     layout.prop(wm, "piebind_op_choice", text="操作符 ID")
 
 

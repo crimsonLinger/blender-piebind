@@ -157,7 +157,7 @@ class PIEBIND_OT_pick_operator(bpy.types.Operator):
             return {"CANCELLED"}
         wm.piebind_op_choice = self.idname
         if not wm.piebind_slot_text:
-            wm.piebind_slot_text = ke.operator_label(self.idname)
+            wm.piebind_slot_text = ke.operator_label_zh(self.idname)
         return {"FINISHED"}
 
 
@@ -356,7 +356,7 @@ class PIEBIND_OT_add_slot(bpy.types.Operator):
         slot = {
             "kind": "operator",
             "idname": idname,
-            "text": wm.piebind_slot_text or ke.operator_label(idname),
+            "text": wm.piebind_slot_text or ke.operator_label_zh(idname),
             "icon": wm.piebind_slot_icon or "NONE",
         }
         config.set_slot(data, pie_id, wm.piebind_slot_pos, slot)
