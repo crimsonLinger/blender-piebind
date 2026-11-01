@@ -222,7 +222,7 @@ class PIEBIND_AP_Preferences(bpy.types.AddonPreferences):
                 op.pie_id = current["id"]
 
                 editor = box.box()
-                editor.label(text=f"编辑槽位 · {pie.SLOT_LABELS[wm.piebind_slot_pos]}", icon="EDIT")
+                editor.label(text=f"编辑槽位 · {pie.SLOT_LABELS[wm.piebind_slot_pos]}", icon="TOOL_SETTINGS")
                 editor.prop(wm, "piebind_slot_pos", text="方位")
                 editor.prop(wm, "piebind_slot_mode", text="模式")
                 if getattr(wm, "piebind_slot_mode", "AUTO") != "AUTO":

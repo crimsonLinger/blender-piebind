@@ -76,6 +76,21 @@ def main():
     label = ke.key_label({"type": "ONE", "ctrl": True})
     check("数字键标签", label == "Ctrl+1", label)
 
+    section("图标合法性")
+    import re as _re
+    import pathlib as _pathlib
+    _icons = {
+        item.identifier
+        for item in bpy.types.UILayout.bl_rna.functions["label"].parameters["icon"].enum_items
+    }
+    _bad = []
+    for _path in _pathlib.Path(__file__).resolve().parent.parent.joinpath("src", "piebind").glob("*.py"):
+        _text = _path.read_text(encoding="utf-8")
+        for _m in _re.finditer(r'icon\s*=\s*"([A-Z0-9_]+)"', _text):
+            if _m.group(1) not in _icons:
+                _bad.append(f"{_path.name}:{_text[:_m.start()].count(chr(10)) + 1}:{_m.group(1)}")
+    check("源码中图标名全部合法", not _bad, _bad[:5])
+
     section("Keymap 列表")
     rows_all = ops.keymap_rows()
     check("keymap 列表非空", len(rows_all) > 10, len(rows_all))
