@@ -115,11 +115,11 @@ def main():
     check("dry-run 报告创建数", len(dry["created"]) == 1, dry)
     check("dry-run 未真实创建", before == after, (before, after))
 
-    section("强制覆盖：静音与复原")
+    section("强制覆盖：就地接管与复原")
     data = config.load()
     spec = {"name": "3D View", "space": "VIEW_3D", "region": "WINDOW"}
     km = ke.ensure_keymap(addon_kc, spec)
-    # 模拟另一个插件先占用了 SAME 键位
+    # 模拟另一个插件先占用了同一键位
     rival = km.keymap_items.new("wm.context_toggle", "F9", "PRESS", ctrl=True, alt=True, shift=True)
     rival.properties.data_path = "scene.tool_settings.use_snap"
     rival_key = {"type": "F9", "value": "PRESS", "ctrl": True, "alt": True, "shift": True}
@@ -130,16 +130,17 @@ def main():
     data["bindings"][0]["key"] = rival_key
     config.save(data)
     report = ke.apply(data)
-    check("覆盖报告含静音项", len(report["muted"]) >= 1, report["muted"])
-    check("干扰条目被静音", rival.active is False, rival.active)
-    check("journal 已写入", config.read_journal() is not None)
-
-    win_spec = {"name": "Window", "space": "EMPTY", "region": "WINDOW"}
-    ours = items_in(target_kc, win_spec, idname=ke.DISPATCH_IDNAME)
-    check("我们的条目处于激活", len(ours) == 1 and ours[0].active, len(ours))
+    check("覆盖报告标记为接管", report["created"] and report["created"][0].get("patched") == 1, report["created"])
+    check("干扰条目被改写成分发器", rival.idname == ke.DISPATCH_IDNAME, rival.idname)
+    check("接管后条目仍激活", rival.active is True, rival.active)
+    check("journal 记下接管信息", (config.read_journal() or {}).get("patched") is not None,
+          config.read_journal())
 
     ke.unapply()
-    check("复原后干扰条目恢复激活", rival.active is True, rival.active)
+    check("复原后条目写回原操作符", rival.idname == "wm.context_toggle", rival.idname)
+    check("复原后参数写回", getattr(rival.properties, "data_path", "") == "scene.tool_settings.use_snap",
+          getattr(rival.properties, "data_path", ""))
+    check("复原后仍激活", rival.active is True, rival.active)
     check("复原后 journal 清空", config.read_journal() is None)
     try:
         km.keymap_items.remove(rival)
@@ -161,7 +162,7 @@ def main():
     check("缺失操作符被跳过", any(s.get("binding") == "bd_missing" for s in report["skipped"]), report["skipped"])
     ke.unapply()
 
-    section("原生操作符目标：不静音自己、可幂等重放")
+    section("原生操作符目标：就地接管、可幂等重放")
     spec = {"name": "3D View", "space": "VIEW_3D", "region": "WINDOW"}
     km = ke.ensure_keymap(addon_kc, spec)
     native_key = {"type": "F6", "value": "PRESS", "ctrl": True, "shift": True, "alt": True}
@@ -180,21 +181,19 @@ def main():
     }]
     config.save(data)
     report = ke.apply(data)
-    matches = items_in(addon_kc, spec, key=native_key) + items_in(target_kc, win_spec, key=native_key)
-    check("目标同 combo 共 2 条", len(matches) == 2, len(matches))
-    check("我们自己那条保持激活", any(k.active for k in matches), [k.active for k in matches])
-    check("干扰项被静音", rival.active is False, rival.active)
-    check("owned.json 已写入", len(config.read_owned()) == 1, config.read_owned())
+    matches = items_in(addon_kc, spec, key=native_key)
+    check("就地接管为分发器", len(matches) == 1 and matches[0].idname == ke.DISPATCH_IDNAME,
+          [m.idname for m in matches])
+    check("接管条目携带 binding_id",
+          getattr(matches[0].properties, "binding_id", "") == "bd_native", matches)
 
     ke.apply(config.load())  # 重放
-    matches = items_in(addon_kc, spec, key=native_key) + items_in(target_kc, win_spec, key=native_key)
-    check("重放不产生重复条目", len(matches) == 2, len(matches))
-    check("重放后仍只有 1 条激活", sum(1 for k in matches if k.active) == 1,
-          [k.active for k in matches])
+    matches = items_in(addon_kc, spec, key=native_key)
+    check("重放不产生重复条目", len(matches) == 1, len(matches))
 
     ke.unapply()
-    check("卸载后 owned.json 清空", config.read_owned() == [])
-    check("卸载后干扰项恢复", rival.active is True, rival.active)
+    check("卸载后写回原操作符", rival.idname == "wm.context_toggle", rival.idname)
+    check("卸载后 owned 清空", config.read_owned() == [])
     try:
         km.keymap_items.remove(rival)
     except Exception:

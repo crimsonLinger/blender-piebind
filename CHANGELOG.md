@@ -2,6 +2,32 @@
 
 倒序记录。每轮迭代追加：`## 日期 · 第N轮：一句话主题`，末尾写「当前状态 / 下一步 / 未验证」。
 
+## 2026-11-02 · 第7轮：覆盖机制改为「就地接管」，真实按键端到端全部验证通过
+
+### 结论
+- 新增 `_patch_takeover()`：`force_override` 时不再静音，而是把命中的既有条目**就地改写**为
+  `piebind.dispatch`（`KeyMapItem.idname` 实测可写），并把原操作符 + 属性快照记进 journal，复原时写回。
+- 原因（实测）：区域 keymap 里**被静音的条目仍会消费按键**，Window 层条目接不到，所以只能改写入键条目本身。
+- 真实按键验证（`tests/gui_probe_override.py`，Shift+Tab 覆盖内置吸附开关）：
+  - 接管：`patched: 2`（`Blender` + `Blender user` 两层同时改写）
+  - 按下后：`use_snap_rotate=True`、`use_snap=False` → **我们的目标执行，原功能未被触发**
+  - 分发器日志：`enter binding=bd_override area=VIEW_3D` → `called wm.context_toggle -> {'FINISHED'}`
+  - 自动复原后无残留。
+- 生命周期验证（`tests/gui_probe_lifecycle.py`，隔离配置目录）：扩展启用 → 应用 → 分发器执行 → 禁用 → **残留 0**。
+- headless 测试 **48/48** 通过（覆盖改为接管语义后同步更新）。
+
+### 当前状态
+- v0.1 的核心承诺全部有实测证据：体检 / 覆盖（可逆）/ 饼菜单调用 / 复原 / 生命周期清理 / agent API。
+- 扩展包 `dist/piebind-0.1.0.zip`（约 26 KB），manifest 校验通过。
+
+### 下一步
+1. 建 GitHub 仓库并推送、打 tag、Release 挂 zip。
+2. CI 首跑（4.2 风险最高）。
+3. 真实安装后重启一次，确认无残留（journal/owned 已覆盖，但未做真实重启验证）。
+
+### 未验证
+- Blender 4.2 兼容；GitHub Actions 实跑；真实重启后的残留检查。
+
 ## 2026-11-02 · 第6轮：端到端打通（`keyconfigs.update()` 是缺失的一环）
 
 ### 结论

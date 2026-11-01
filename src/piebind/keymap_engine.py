@@ -590,10 +590,81 @@ def _mute(records, spec, key, dry_run, skip_ids=None):
     return records
 
 
+def _patch_takeover(binding_id, spec, key):
+    """就地接管：把命中的既有条目改写成分发器，原样记录以便复原。
+
+    实测：区域 keymap 里被静音的条目仍会消费按键，因此不能靠「静音 + Window 层」覆盖，
+    只能直接改写入键条目本身。
+    """
+    patched = []
+    for _layer, kc in iter_layers():
+        km = find_keymap(kc, spec)
+        if km is None:
+            continue
+        for kmi in list(km.keymap_items):
+            if not kmi.active or is_own(kmi):
+                continue
+            if not combo_match(kmi, key):
+                continue
+            record = {
+                "kc": kc.name,
+                "keymap": dict(spec),
+                "key": normalize_key(key),
+                "binding_id": binding_id,
+                "orig_idname": kmi.idname,
+                "orig_props": _props_snapshot(kmi),
+            }
+            try:
+                kmi.idname = DISPATCH_IDNAME
+                setattr(kmi.properties, "binding_id", binding_id)
+            except Exception:
+                continue
+            patched.append(record)
+    return patched
+
+
+def restore_patches(records):
+    """把被就地接管的条目写回原操作符与参数。"""
+    restored = 0
+    wm = bpy.context.window_manager
+    for record in records or []:
+        for kc in list(wm.keyconfigs):
+            if kc.name != record.get("kc"):
+                continue
+            km = find_keymap(kc, record.get("keymap") or {})
+            if km is None:
+                continue
+            for kmi in list(km.keymap_items):
+                if kmi.idname != DISPATCH_IDNAME:
+                    continue
+                if getattr(kmi.properties, "binding_id", None) != record.get("binding_id"):
+                    continue
+                if not combo_match(kmi, record.get("key") or {}):
+                    continue
+                try:
+                    kmi.idname = record["orig_idname"]
+                    for name, value in (record.get("orig_props") or {}).items():
+                        try:
+                            setattr(kmi.properties, name, value)
+                        except Exception:
+                            pass
+                    restored += 1
+                except Exception:
+                    pass
+                break
+    return restored
+
+
 def apply(data, dry_run=False):
     """应用全部启用中的绑定；幂等。"""
     if not dry_run:
-        # 重新应用前先把上一轮造成的静音恢复，避免状态漂移
+        # 重新应用前先复原上一轮的就地接管与静音，避免状态漂移
+        if APPLIED.get("patched"):
+            restore_patches(APPLIED["patched"])
+            APPLIED["patched"] = []
+        journal = config.read_journal() or {}
+        if journal.get("patched"):
+            restore_patches(journal["patched"])
         if APPLIED.get("muted"):
             restore_entries(APPLIED["muted"])
             APPLIED["muted"] = []
@@ -609,6 +680,7 @@ def apply(data, dry_run=False):
 
     created = []
     muted = []
+    patched = []
     created_ids = set()
     owned_sigs = []
 
@@ -635,6 +707,33 @@ def apply(data, dry_run=False):
             report["skipped"].append({"binding": binding.get("id"), "reason": "keymap missing"})
             continue
         key = normalize_key(binding.get("key") or {})
+
+        # 强制覆盖：优先就地接管既有条目（区域 keymap 的静音项仍会吃掉按键）
+        patched_here = []
+        if binding.get("force_override"):
+            if dry_run:
+                patched_here = []
+                for _layer, layer_kc in iter_layers():
+                    layer_km = find_keymap(layer_kc, spec)
+                    if layer_km is None:
+                        continue
+                    patched_here += [
+                        {"kc": layer_kc.name, "orig_idname": kmi.idname}
+                        for kmi in layer_km.keymap_items
+                        if kmi.active and not is_own(kmi) and combo_match(kmi, key)
+                    ]
+            else:
+                patched_here = _patch_takeover(binding.get("id"), spec, key)
+        if patched_here:
+            patched.extend(patched_here)
+            report["created"].append({
+                "binding": binding.get("id"),
+                "idname": DISPATCH_IDNAME,
+                "key": key_label(key),
+                "keymap": f'{spec.get("name")} [{spec.get("space", "")}]',
+                "patched": len(patched_here),
+            })
+            continue
 
         km = find_keymap(kc, WINDOW_SPEC) if dry_run else ensure_keymap(kc, WINDOW_SPEC)
         if km is None:
@@ -673,11 +772,16 @@ def apply(data, dry_run=False):
 
     APPLIED["items"] = created
     APPLIED["muted"] = muted
+    APPLIED["patched"] = patched
     APPLIED["applied_at"] = time.time()
     config.write_owned(owned_sigs)
     refresh_owned()
-    if muted:
-        config.write_journal({"version": 1, "entries": _journal_entries(muted)})
+    if muted or patched:
+        config.write_journal({
+            "version": 1,
+            "entries": _journal_entries(muted),
+            "patched": patched,
+        })
     else:
         config.clear_journal()
     # 让键位层重新合并一次；否则运行中途新增的条目可能不参与分发
@@ -713,7 +817,12 @@ def purge():
 
 
 def unapply():
-    """移除我们的键位并恢复被静音的条目。"""
+    """移除我们的键位、写回被接管的条目、恢复被静音的条目。"""
+    journal = config.read_journal() or {}
+    restored = restore_patches(
+        (APPLIED.get("patched") or []) + (journal.get("patched") or [])
+    )
+
     removed = 0
     refresh_owned()
     for _layer, kc in list(iter_layers()):
@@ -727,16 +836,13 @@ def unapply():
                 except Exception:
                     pass
 
-    entries = []
-    journal = config.read_journal()
-    if journal:
-        entries.extend(journal.get("entries") or [])
+    entries = list(journal.get("entries") or [])
     entries.extend(_journal_entries(APPLIED.get("muted") or []))
-
-    restored = restore_entries(entries)
+    restored += restore_entries(entries)
 
     APPLIED["items"] = []
     APPLIED["muted"] = []
+    APPLIED["patched"] = []
     config.clear_owned()
     refresh_owned()
     config.clear_journal()
@@ -744,11 +850,11 @@ def unapply():
 
 
 def reconcile_journal():
-    """启动时按 journal 恢复残留静音（崩溃自愈）。"""
+    """启动时按 journal 恢复残留（就地接管写回 + 静音恢复）。"""
     journal = config.read_journal()
     if not journal:
         return {"restored": 0, "pending": 0}
-    restored = 0
+    restored = restore_patches(journal.get("patched") or [])
     for entry in journal.get("entries") or []:
         for _km, kmi in _locate_items(entry):
             if not kmi.active:
