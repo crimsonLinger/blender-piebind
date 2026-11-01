@@ -236,7 +236,15 @@ class PIEBIND_AP_Preferences(bpy.types.AddonPreferences):
         row.label(text=wm.piebind_capture_label or "（未捕获）")
         row.operator("piebind.capture_key", text="捕获", icon="REC")
         row = box.row(align=True)
-        row.prop(wm, "piebind_keymap", text="Keymap")
+        row.prop(wm, "piebind_keymap_query", text="Keymap 搜索")
+        spec = ops.split_keymap_identifier(wm.piebind_keymap)
+        if spec:
+            suffix = f" [{spec['space']}]" if spec.get("space") not in ("", "EMPTY") else ""
+            km_label = f"Keymap：{spec['name']}{suffix}"
+        else:
+            km_label = "Keymap：未选择（默认 3D View）"
+        row = box.row(align=True)
+        row.menu("PIEBIND_MT_keymaps", text=km_label, icon="KEYINGSET")
         row = box.row(align=True)
         row.prop(wm, "piebind_target_kind", expand=True)
         if wm.piebind_target_kind == "pie":

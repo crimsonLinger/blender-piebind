@@ -76,6 +76,16 @@ def main():
     label = ke.key_label({"type": "ONE", "ctrl": True})
     check("数字键标签", label == "Ctrl+1", label)
 
+    section("Keymap 列表")
+    rows_all = ops.keymap_rows()
+    check("keymap 列表非空", len(rows_all) > 10, len(rows_all))
+    rows_q = ops.keymap_rows("3d")
+    check("keymap 搜索可用", all("3d" in (r["name"] + r["space"]).lower() for r in rows_q) and len(rows_q) > 0,
+          len(rows_q))
+    if rows_all:
+        first = rows_all[0]["name"]
+        check("常用 keymap 优先", first in ops.COMMON_KEYMAPS or len(rows_all) < 3, first)
+
     section("捕获回调")
     class _CaptureStub:
         binding_id = ""

@@ -29,17 +29,20 @@ def make_keymap_identifier(name, space, region):
     return json.dumps([name, space, region], ensure_ascii=False)
 
 
-def _refresh_keymap_items(self, context):
-    """动态枚举：keymap 列表（按名字 + 空间去重）。"""
-    try:
-        wm = context.window_manager
-        kc = wm.keyconfigs.active or wm.keyconfigs.user
-    except Exception:
-        kc = None
-    items = []
+COMMON_KEYMAPS = [
+    "3D View", "Object Non-modal", "Mesh", "Sculpt", "Pose", "Node Editor",
+    "Dopesheet", "Sequencer", "UV Editor", "Console", "Text", "Image",
+    "NLA Editor", "Graph Editor", "Outliner", "Window",
+]
+
+
+def keymap_rows(query=""):
+    """返回 keymap 行：[{id, label, name, space, region}]；常用项优先。"""
+    wm = bpy.context.window_manager
+    kc = wm.keyconfigs.active or wm.keyconfigs.user
+    rows = []
     seen = set()
     if kc is not None:
-        rows = []
         for km in kc.keymaps:
             if getattr(km, "is_modal", False):
                 continue
@@ -47,14 +50,31 @@ def _refresh_keymap_items(self, context):
             if ident in seen:
                 continue
             seen.add(ident)
-            rows.append((km.space_type, km.name, km.region_type))
-        rows.sort()
-        for space, name, region in rows:
-            label = f"{name}  [{space}]" if space and space != "EMPTY" else name
-            items.append((make_keymap_identifier(name, space, region), label, name))
-    if not items:
-        items = [("null", "(无可用 keymap)", "")]
-    return items
+            rows.append({
+                "id": make_keymap_identifier(km.name, km.space_type, km.region_type),
+                "name": km.name,
+                "space": km.space_type,
+                "region": km.region_type,
+                "label": f"{km.name}  [{km.space_type}]" if km.space_type != "EMPTY" else km.name,
+            })
+
+    q = (query or "").strip().lower()
+    if q:
+        rows = [r for r in rows if q in r["name"].lower() or q in r["space"].lower()]
+
+    def rank(row):
+        try:
+            return (0, COMMON_KEYMAPS.index(row["name"]), row["name"])
+        except ValueError:
+            return (1, 0, row["name"])
+
+    rows.sort(key=rank)
+    return rows
+
+
+def _refresh_keymap_items(self, context):
+    """兼容旧调用：返回下拉项（面板已改为菜单）。"""
+    return [(r["id"], r["label"], r["name"]) for r in keymap_rows()]
 
 
 def _refresh_pie_items(self, context):
@@ -244,8 +264,11 @@ WM_PROPS = {
         name="捕获结果", default="", options={"SKIP_SAVE"}
     ),
     "piebind_key_json": lambda: bpy.props.StringProperty(default="", options={"SKIP_SAVE"}),
-    "piebind_keymap": lambda: bpy.props.EnumProperty(
-        name="Keymap", items=_refresh_keymap_items, options={"SKIP_SAVE"},
+    "piebind_keymap": lambda: bpy.props.StringProperty(
+        name="Keymap", default="", options={"SKIP_SAVE"},
+    ),
+    "piebind_keymap_query": lambda: bpy.props.StringProperty(
+        name="Keymap 搜索", default="", options={"SKIP_SAVE"},
     ),
     "piebind_target_kind": lambda: bpy.props.EnumProperty(
         name="目标类型",
@@ -325,6 +348,45 @@ class PIEBIND_OT_delete_pie(bpy.types.Operator):
         ke.apply(config.load())
         self.report({"INFO"}, f"已删除饼：{pie_data.get('label', pie_id)}")
         return {"FINISHED"}
+
+
+class PIEBIND_OT_select_keymap(bpy.types.Operator):
+    bl_idname = "piebind.select_keymap"
+    bl_label = "选择 Keymap"
+    bl_options = {"REGISTER", "INTERNAL"}
+
+    identifier: bpy.props.StringProperty()
+
+    def execute(self, context):
+        if not self.identifier:
+            return {"CANCELLED"}
+        context.window_manager.piebind_keymap = self.identifier
+        return {"FINISHED"}
+
+
+class PIEBIND_MT_keymaps(bpy.types.Menu):
+    bl_label = "选择 Keymap"
+    bl_idname = "PIEBIND_MT_keymaps"
+
+    def draw(self, context):
+        layout = self.layout
+        wm = context.window_manager
+        rows = keymap_rows(getattr(wm, "piebind_keymap_query", ""))
+        if not rows:
+            layout.label(text="没有匹配的 keymap")
+            return
+        limit = 30
+        current = getattr(wm, "piebind_keymap", "")
+        for row in rows[:limit]:
+            op = layout.operator(
+                "piebind.select_keymap",
+                text=row["label"],
+                icon="CHECKMARK" if row["id"] == current else "DOT",
+            )
+            op.identifier = row["id"]
+        if len(rows) > limit:
+            layout.separator()
+            layout.label(text=f"还有 {len(rows) - limit} 条，请用上方搜索框缩小范围")
 
 
 class PIEBIND_MT_pies(bpy.types.Menu):
@@ -651,8 +713,9 @@ class PIEBIND_OT_create_binding(bpy.types.Operator):
         wm = context.window_manager
         spec = split_keymap_identifier(wm.piebind_keymap)
         if spec is None:
-            self.report({"ERROR"}, "请选择 Keymap")
-            return {"CANCELLED"}
+            spec = {"name": "3D View", "space": "VIEW_3D", "region": "WINDOW"}
+            wm.piebind_keymap = make_keymap_identifier("3D View", "VIEW_3D", "WINDOW")
+            self.report({"WARNING"}, "未选择 Keymap，已默认 3D View")
         raw = wm.piebind_key_json
         if not raw:
             self.report({"ERROR"}, "请先捕获快捷键")
@@ -872,6 +935,8 @@ CLASSES = (
     PIEBIND_OT_pick_operator,
     PIEBIND_OT_select_pie,
     PIEBIND_OT_delete_pie,
+    PIEBIND_OT_select_keymap,
+    PIEBIND_MT_keymaps,
     PIEBIND_MT_pies,
     PIEBIND_MT_operators,
 )

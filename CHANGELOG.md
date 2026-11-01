@@ -2,6 +2,25 @@
 
 倒序记录。每轮迭代追加：`## 日期 · 第N轮：一句话主题`，末尾写「当前状态 / 下一步 / 未验证」。
 
+## 2026-11-02 · 第17轮：Keymap 选择改为「搜索 + 常用优先菜单」
+
+### 反馈
+- 用户截图：Keymap 下拉一次列出 280 项，难以选择（“选项众多”）。
+
+### 改动
+- `piebind_keymap` 由动态枚举改为 **StringProperty（JSON 标识）+ 菜单**：
+  - 新增 `keymap_rows(query)`：去重、支持按名称/编辑器类型搜索；
+  - 新增 `PIEBIND_MT_keymaps` 菜单：常用 16 项优先（3D View、Object Non-modal、Mesh、Sculpt、
+    Pose、Node Editor、Dopesheet、Sequencer、UV Editor、Console、Text、Image、NLA、Graph、Outliner、Window），
+    其余按名字排序；当前项打勾；最多显示 30 条，超出提示用搜索缩小；
+  - 新增 `PIEBIND_MT_keymaps` 选择操作符 `piebind.select_keymap`。
+- UI：`Keymap 搜索` 输入框 + `Keymap：xxx [VIEW_3D]` 下拉按钮。
+- 未选择时保存绑定默认 3D View，并给 WARNING 提示。
+- 新增 3 条测试（列表非空、搜索过滤、常用优先）。
+
+### 验证
+- headless **61/61** 通过；包 30.8 KB，已覆盖安装并启用。
+
 ## 2026-11-02 · 第16轮：改用 Area/Region.tag_redraw 真正刷新偏好设置面板
 
 ### 反馈
