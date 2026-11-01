@@ -187,6 +187,9 @@ WM_PROPS = {
     "piebind_force_override": lambda: bpy.props.BoolProperty(
         name="强制覆盖", default=False,
     ),
+    "piebind_restrict_view3d": lambda: bpy.props.BoolProperty(
+        name="仅 3D 视口", default=False,
+    ),
     "piebind_slot_pos": lambda: bpy.props.EnumProperty(
         name="方位", items=_refresh_slot_pos, options={"SKIP_SAVE"},
     ),
@@ -236,6 +239,36 @@ class PIEBIND_OT_call_pie(bpy.types.Operator):
         return self.invoke(context, None)
 
 
+def _set_status(context, text):
+    """兼容不同版本的 status_text API。"""
+    ws = getattr(context, "workspace", None)
+    if ws is None:
+        return
+    try:
+        ws.status_text_set(text)
+    except Exception:
+        try:
+            ws.status_text_set(text, None)
+        except Exception:
+            pass
+
+
+def _clear_status(context):
+    ws = getattr(context, "workspace", None)
+    if ws is None:
+        return
+    for attempt in (
+        lambda: ws.status_text_clear(),
+        lambda: ws.status_text_set(None),
+        lambda: ws.status_text_set(""),
+    ):
+        try:
+            attempt()
+            return
+        except Exception:
+            continue
+
+
 class PIEBIND_OT_capture_key(bpy.types.Operator):
     bl_idname = "piebind.capture_key"
     bl_label = "捕获快捷键"
@@ -246,8 +279,7 @@ class PIEBIND_OT_capture_key(bpy.types.Operator):
     def invoke(self, context, event):
         wm = context.window_manager
         wm.piebind_capture_label = "请按下组合键…（Esc 取消）"
-        if context.workspace:
-            context.workspace.status_text_set("PieBind：请按下组合键…")
+        _set_status(context, "PieBind：请按下组合键…")
         context.window_manager.modal_handler_add(self)
         return {"RUNNING_MODAL"}
 
@@ -265,8 +297,7 @@ class PIEBIND_OT_capture_key(bpy.types.Operator):
             wm.piebind_capture_label = f"已改键：{label}"
         else:
             wm.piebind_capture_label = label
-        if context.workspace:
-            context.workspace.status_text_clear()
+        _clear_status(context)
         return {"FINISHED"}
 
     def modal(self, context, event):
@@ -274,8 +305,7 @@ class PIEBIND_OT_capture_key(bpy.types.Operator):
             return {"RUNNING_MODAL"}
         if event.type in CANCEL_EVENTS:
             context.window_manager.piebind_capture_label = "已取消"
-            if context.workspace:
-                context.workspace.status_text_clear()
+            _clear_status(context)
             return {"CANCELLED"}
         if event.type in MODIFIER_EVENTS:
             return {"RUNNING_MODAL"}
@@ -414,10 +444,12 @@ class PIEBIND_OT_create_binding(bpy.types.Operator):
             "id": config.new_id("bd"),
             "enabled": True,
             "force_override": bool(wm.piebind_force_override),
-            "keymap": spec,
+            "keymap": dict(spec),
             "key": key,
             "target": target,
         }
+        if wm.piebind_restrict_view3d:
+            binding["keymap"]["area"] = "VIEW_3D"
         data["bindings"].append(binding)
         config.save(data)
         ke.apply(data)
@@ -554,6 +586,10 @@ class PIEBIND_OT_dispatch(bpy.types.Operator):
             if area is not None and area.type != space:
                 _dispatch_debug(f"area gate rejected: {area_type} != {space}")
                 return {"CANCELLED"}
+        wanted_area = spec.get("area")
+        if wanted_area and context.area is not None and context.area.type != wanted_area:
+            _dispatch_debug(f"restricted area rejected: {area_type} != {wanted_area}")
+            return {"CANCELLED"}
 
         target = binding.get("target") or {}
         if target.get("kind") == "pie":

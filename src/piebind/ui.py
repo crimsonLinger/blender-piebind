@@ -251,6 +251,7 @@ class PIEBIND_AP_Preferences(bpy.types.AddonPreferences):
         else:
             _draw_operator_picker(box, wm)
         box.prop(wm, "piebind_force_override")
+        box.prop(wm, "piebind_restrict_view3d")
 
         if wm.piebind_key_json:
             try:

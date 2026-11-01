@@ -2,6 +2,29 @@
 
 倒序记录。每轮迭代追加：`## 日期 · 第N轮：一句话主题`，末尾写「当前状态 / 下一步 / 未验证」。
 
+## 2026-11-02 · 第10轮：修捕获键位崩溃 + 新增「仅 3D 视口」作用域
+
+### 崩溃（用户实测）
+```
+AttributeError: 'WorkSpace' object has no attribute 'status_text_clear'
+  File ".../ops.py", line 269, in _finish
+```
+- 5.2 的 `WorkSpace` **没有** `status_text_clear`（实测 `hasattr == False`）。改为兼容封装
+  `_clear_status()`：依次尝试 `status_text_clear()` → `status_text_set(None)` → `status_text_set("")`，
+  并给 `_set_status()` 同样加降级。
+- 捕获 Tab 时因此抛异常；修复后 modal 正常返回 FINISHED。
+
+### 新增作用域
+- 绑定可选 `keymap.area`（UI 勾选「仅 3D 视口」）：分发器在区域匹配时才执行，避免全局键在其他编辑器误触发。
+- `api.bind()` 的 keymap 参数同样接受 `area` 字段。
+
+### 顺带结论（查证）
+- Blender 里**普通 Tab** 注册在 `Object Non-modal`（space=EMPTY），不是 `3D View`；
+  想用 Tab 呼出饼，应选该 keymap + 强制覆盖（+ 仅 3D 视口）。
+
+### 验证
+- headless **50/50** 通过；扩展包重建（27.7 KB）并覆盖安装、启用。
+
 ## 2026-11-02 · 第9轮：操作符搜索支持中文（复用 Blender 自带 UI 翻译）
 
 ### 结论

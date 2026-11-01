@@ -160,11 +160,14 @@ def _normalize_keymap(keymap):
                 return row
         return {"name": name, "space": "EMPTY", "region": "WINDOW"}
     if isinstance(keymap, dict) and keymap.get("name"):
-        return {
+        spec = {
             "name": keymap["name"],
             "space": keymap.get("space") or "EMPTY",
             "region": keymap.get("region") or "WINDOW",
         }
+        if keymap.get("area"):
+            spec["area"] = keymap["area"]
+        return spec
     return None
 
 
