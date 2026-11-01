@@ -1,0 +1,67 @@
+name: Bug report
+description: Something in PieBind does not work as expected
+title: "[bug] "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for the report. The most useful attachment is the diagnostics snapshot:
+        `Preferences > Add-ons > PieBind > Diagnostics` (local paths are redacted).
+
+  - type: input
+    id: blender
+    attributes:
+      label: Blender version
+      placeholder: "5.2.3 LTS"
+    validations:
+      required: true
+
+  - type: input
+    id: os
+    attributes:
+      label: Operating system
+      placeholder: "Windows 11 / macOS 15 / Ubuntu 24.04"
+    validations:
+      required: true
+
+  - type: input
+    id: install
+    attributes:
+      label: How did you install PieBind
+      placeholder: "extension zip / git checkout / other"
+    validations:
+      required: true
+
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: What did you expect, and what happened instead?
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Capture Alt+E in 3D View
+        2. Bind it to a pie with Force override
+        3. Press Alt+E
+    validations:
+      required: true
+
+  - type: textarea
+    id: keymap
+    attributes:
+      label: Keymap snapshot (optional)
+      description: Output of `api.call("check_conflict", ...)` or the conflict lines you see in the panel.
+
+  - type: checkboxes
+    id: diagnostics
+    attributes:
+      label: Attachments
+      options:
+        - label: I attached the diagnostics JSON
+        - label: I attached the Blender console output / crash log

@@ -1,0 +1,502 @@
+"""操作符：键位捕获、应用/复原、调用饼、以及面板用到的增删改。"""
+
+import json
+
+import bpy
+from bpy_extras.io_utils import ExportHelper
+
+from . import config, diagnostics, pie, keymap_engine as ke
+
+MODIFIER_EVENTS = {
+    "LEFT_SHIFT", "RIGHT_SHIFT", "LEFT_CTRL", "RIGHT_CTRL",
+    "LEFT_ALT", "RIGHT_ALT", "OSKEY", "LEFT_OSKEY", "RIGHT_OSKEY",
+    "HYPER", "LEFT_HYPER", "RIGHT_HYPER",
+}
+CANCEL_EVENTS = {"ESC", "NONE"}
+
+
+def split_keymap_identifier(value):
+    try:
+        name, space, region = json.loads(value)
+        return {"name": name, "space": space, "region": region}
+    except Exception:
+        return None
+
+
+def make_keymap_identifier(name, space, region):
+    return json.dumps([name, space, region], ensure_ascii=False)
+
+
+def _refresh_keymap_items(self, context):
+    """动态枚举：keymap 列表（按名字 + 空间去重）。"""
+    try:
+        wm = context.window_manager
+        kc = wm.keyconfigs.active or wm.keyconfigs.user
+    except Exception:
+        kc = None
+    items = []
+    seen = set()
+    if kc is not None:
+        rows = []
+        for km in kc.keymaps:
+            if getattr(km, "is_modal", False):
+                continue
+            ident = (km.name, km.space_type, km.region_type)
+            if ident in seen:
+                continue
+            seen.add(ident)
+            rows.append((km.space_type, km.name, km.region_type))
+        rows.sort()
+        for space, name, region in rows:
+            label = f"{name}  [{space}]" if space and space != "EMPTY" else name
+            items.append((make_keymap_identifier(name, space, region), label, name))
+    if not items:
+        items = [("null", "(无可用 keymap)", "")]
+    return items
+
+
+def _refresh_pie_items(self, context):
+    try:
+        data = config.load()
+    except Exception:
+        data = {"pies": []}
+    items = [(p["id"], p.get("label") or p["id"], "") for p in data.get("pies", [])]
+    return items or [("none", "(还没有饼)", "")]
+
+
+def _refresh_slot_pos(self, context):
+    return [(pos, pie.SLOT_LABELS[pos], "") for pos in pie.SLOT_ORDER]
+
+
+ICON_ITEMS = [
+    ("NONE", "无", ""),
+    ("MESH_CUBE", "立方体", ""),
+    ("MESH_DATA", "网格", ""),
+    ("OBJECT_DATA", "物体", ""),
+    ("ARMATURE_DATA", "骨架", ""),
+    ("BONE_DATA", "骨骼", ""),
+    ("MOD_BEVEL", "倒角", ""),
+    ("MOD_BOOLEAN", "布尔", ""),
+    ("MOD_MIRROR", "镜像", ""),
+    ("MOD_SUBSURF", "细分", ""),
+    ("MODIFIER", "修改器", ""),
+    ("SNAP_ON", "吸附开", ""),
+    ("SNAP_OFF", "吸附关", ""),
+    ("UV", "UV", ""),
+    ("MATERIAL", "材质", ""),
+    ("NODE", "节点", ""),
+    ("LIGHT", "灯光", ""),
+    ("CAMERA_DATA", "相机", ""),
+    ("EMPTY_DATA", "空物体", ""),
+    ("VIEW3D", "视图", ""),
+    ("ADD", "添加", ""),
+    ("REMOVE", "移除", ""),
+    ("DUPLICATE", "复制", ""),
+    ("X", "删除", ""),
+    ("CHECKMARK", "确认", ""),
+    ("PLAY", "播放", ""),
+    ("REC", "录制", ""),
+    ("EDIT", "编辑", ""),
+    ("COPYDOWN", "复制值", ""),
+    ("PASTEDOWN", "粘贴值", ""),
+]
+
+
+def _on_query_update(self, context):
+    hits = ke.search_operators(getattr(self, "piebind_op_query", ""), limit=40)
+    if not hits:
+        return
+    try:
+        self.piebind_op_choice = hits[0]
+    except Exception:
+        pass
+
+
+def _on_op_choice(self, context):
+    choice = getattr(self, "piebind_op_choice", "")
+    if not choice or choice == "NONE":
+        return
+    if not getattr(self, "piebind_slot_text", ""):
+        try:
+            self.piebind_slot_text = ke.operator_label(choice)
+        except Exception:
+            pass
+
+
+def _operator_choices(self, context):
+    query = getattr(self, "piebind_op_query", "")
+    hits = ke.search_operators(query, limit=40)
+    if not hits:
+        return [("NONE", "(无匹配操作符)", "")]
+    return [(idn, f"{ke.operator_label(idn)}  ·  {idn}", "") for idn in hits]
+
+
+WM_PROPS = {
+    "piebind_capture_label": lambda: bpy.props.StringProperty(
+        name="捕获结果", default="", options={"SKIP_SAVE"}
+    ),
+    "piebind_key_json": lambda: bpy.props.StringProperty(default="", options={"SKIP_SAVE"}),
+    "piebind_keymap": lambda: bpy.props.EnumProperty(
+        name="Keymap", items=_refresh_keymap_items
+    ),
+    "piebind_target_kind": lambda: bpy.props.EnumProperty(
+        name="目标类型",
+        items=[("operator", "操作符", ""), ("pie", "饼菜单", "")],
+        default="operator",
+    ),
+    "piebind_op_query": lambda: bpy.props.StringProperty(
+        name="搜索", default="", options={"SKIP_SAVE"}, update=_on_query_update,
+    ),
+    "piebind_op_choice": lambda: bpy.props.EnumProperty(
+        name="操作符", items=_operator_choices, update=_on_op_choice,
+    ),
+    "piebind_pie": lambda: bpy.props.EnumProperty(name="饼菜单", items=_refresh_pie_items),
+    "piebind_force_override": lambda: bpy.props.BoolProperty(
+        name="强制覆盖", default=False,
+    ),
+    "piebind_slot_pos": lambda: bpy.props.EnumProperty(
+        name="方位", items=_refresh_slot_pos
+    ),
+    "piebind_slot_text": lambda: bpy.props.StringProperty(
+        name="文字", default="", options={"SKIP_SAVE"}
+    ),
+    "piebind_slot_icon": lambda: bpy.props.EnumProperty(
+        name="图标", items=ICON_ITEMS
+    ),
+    "piebind_new_pie_label": lambda: bpy.props.StringProperty(
+        name="饼名称", default="新建饼", options={"SKIP_SAVE"}
+    ),
+    "piebind_status": lambda: bpy.props.StringProperty(
+        name="状态", default="", options={"SKIP_SAVE"}
+    ),
+}
+
+
+def register_wm_props():
+    for name, factory in WM_PROPS.items():
+        setattr(bpy.types.WindowManager, name, factory())
+
+
+def unregister_wm_props():
+    for name in WM_PROPS:
+        if hasattr(bpy.types.WindowManager, name):
+            delattr(bpy.types.WindowManager, name)
+
+
+# ---------------------------------------------------------------- operators
+class PIEBIND_OT_call_pie(bpy.types.Operator):
+    bl_idname = "piebind.call_pie"
+    bl_label = "调用饼菜单"
+    bl_options = {"REGISTER", "INTERNAL"}
+
+    pie_id: bpy.props.StringProperty()
+
+    def invoke(self, context, event):
+        pie.PIE_STATE["pie_id"] = self.pie_id
+        try:
+            return bpy.ops.wm.call_menu_pie("INVOKE_DEFAULT", name=pie.PIE_MENU_ID)
+        except Exception as exc:
+            self.report({"ERROR"}, f"调用饼菜单失败：{exc}")
+            return {"CANCELLED"}
+
+    def execute(self, context):
+        return self.invoke(context, None)
+
+
+class PIEBIND_OT_capture_key(bpy.types.Operator):
+    bl_idname = "piebind.capture_key"
+    bl_label = "捕获快捷键"
+    bl_options = {"REGISTER", "INTERNAL"}
+
+    binding_id: bpy.props.StringProperty()
+
+    def invoke(self, context, event):
+        wm = context.window_manager
+        wm.piebind_capture_label = "请按下组合键…（Esc 取消）"
+        if context.workspace:
+            context.workspace.status_text_set("PieBind：请按下组合键…")
+        context.window_manager.modal_handler_add(self)
+        return {"RUNNING_MODAL"}
+
+    def _finish(self, context, label, key):
+        wm = context.window_manager
+        wm.piebind_key_json = json.dumps(key)
+        if self.binding_id:
+            data = config.load()
+            for binding in data["bindings"]:
+                if binding.get("id") == self.binding_id:
+                    binding["key"] = key
+                    config.save(data)
+                    ke.apply(data)
+                    break
+            wm.piebind_capture_label = f"已改键：{label}"
+        else:
+            wm.piebind_capture_label = label
+        if context.workspace:
+            context.workspace.status_text_clear()
+        return {"FINISHED"}
+
+    def modal(self, context, event):
+        if event.value not in ("PRESS", "CLICK", "DOUBLE_CLICK"):
+            return {"RUNNING_MODAL"}
+        if event.type in CANCEL_EVENTS:
+            context.window_manager.piebind_capture_label = "已取消"
+            if context.workspace:
+                context.workspace.status_text_clear()
+            return {"CANCELLED"}
+        if event.type in MODIFIER_EVENTS:
+            return {"RUNNING_MODAL"}
+
+        key = {
+            "type": event.type,
+            "value": "PRESS" if event.value != "CLICK" else "PRESS",
+            "ctrl": event.ctrl,
+            "shift": event.shift,
+            "alt": event.alt,
+            "oskey": event.oskey,
+            "any": event.alt and event.ctrl and event.shift,
+            "key_modifier": "NONE",
+        }
+        return self._finish(context, ke.key_label(key), key)
+
+
+class PIEBIND_OT_apply(bpy.types.Operator):
+    bl_idname = "piebind.apply"
+    bl_label = "应用键位"
+    bl_description = "把配置写入键位并静音冲突项（会写 journal 以便复原）"
+    bl_options = {"REGISTER", "INTERNAL"}
+
+    def execute(self, context):
+        data = config.load()
+        report = ke.apply(data)
+        msg = f"已创建 {len(report['created'])} 条绑定，静音 {len(report['muted'])} 条冲突项"
+        context.window_manager.piebind_status = msg
+        self.report({"INFO"}, msg)
+        return {"FINISHED"}
+
+
+class PIEBIND_OT_unapply(bpy.types.Operator):
+    bl_idname = "piebind.unapply"
+    bl_label = "全部复原"
+    bl_description = "移除本插件键位并恢复被静音的条目"
+    bl_options = {"REGISTER", "INTERNAL"}
+
+    def execute(self, context):
+        result = ke.unapply()
+        msg = f"移除 {result['removed']} 条，恢复 {result['restored']} 条"
+        context.window_manager.piebind_status = msg
+        self.report({"INFO"}, msg)
+        return {"FINISHED"}
+
+
+class PIEBIND_OT_create_pie(bpy.types.Operator):
+    bl_idname = "piebind.create_pie"
+    bl_label = "新建饼"
+    bl_options = {"REGISTER", "INTERNAL"}
+
+    def execute(self, context):
+        wm = context.window_manager
+        data = config.load()
+        created = config.create_pie(data, wm.piebind_new_pie_label or "新建饼")
+        config.save(data)
+        wm.piebind_pie = created["id"]
+        wm.piebind_status = f"已创建饼：{created['label']}"
+        return {"FINISHED"}
+
+
+class PIEBIND_OT_add_slot(bpy.types.Operator):
+    bl_idname = "piebind.add_slot"
+    bl_label = "写入槽位"
+    bl_options = {"REGISTER", "INTERNAL"}
+
+    def execute(self, context):
+        wm = context.window_manager
+        pie_id = wm.piebind_pie
+        idname = wm.piebind_op_choice
+        data = config.load()
+        if not config.find_pie(data, pie_id):
+            self.report({"ERROR"}, "请先选择饼")
+            return {"CANCELLED"}
+        if not ke.has_operator(idname):
+            self.report({"ERROR"}, f"操作符不存在：{idname}")
+            return {"CANCELLED"}
+        slot = {
+            "kind": "operator",
+            "idname": idname,
+            "text": wm.piebind_slot_text or ke.operator_label(idname),
+            "icon": wm.piebind_slot_icon or "NONE",
+        }
+        config.set_slot(data, pie_id, wm.piebind_slot_pos, slot)
+        config.save(data)
+        wm.piebind_status = f"已写入槽位 {wm.piebind_slot_pos}：{idname}"
+        return {"FINISHED"}
+
+
+class PIEBIND_OT_remove_slot(bpy.types.Operator):
+    bl_idname = "piebind.remove_slot"
+    bl_label = "清空槽位"
+    bl_options = {"REGISTER", "INTERNAL"}
+
+    pie_id: bpy.props.StringProperty()
+    pos: bpy.props.StringProperty()
+
+    def execute(self, context):
+        data = config.load()
+        config.set_slot(data, self.pie_id, self.pos, None)
+        config.save(data)
+        return {"FINISHED"}
+
+
+class PIEBIND_OT_create_binding(bpy.types.Operator):
+    bl_idname = "piebind.create_binding"
+    bl_label = "保存绑定"
+    bl_options = {"REGISTER", "INTERNAL"}
+
+    def execute(self, context):
+        wm = context.window_manager
+        spec = split_keymap_identifier(wm.piebind_keymap)
+        if spec is None:
+            self.report({"ERROR"}, "请选择 Keymap")
+            return {"CANCELLED"}
+        raw = wm.piebind_key_json
+        if not raw:
+            self.report({"ERROR"}, "请先捕获快捷键")
+            return {"CANCELLED"}
+        key = json.loads(raw)
+        kind = wm.piebind_target_kind
+        if kind == "pie":
+            target = {"kind": "pie", "id": wm.piebind_pie, "props": {}}
+            if not config.find_pie(config.load(), target["id"]):
+                self.report({"ERROR"}, "请选择饼菜单")
+                return {"CANCELLED"}
+        else:
+            idname = wm.piebind_op_choice
+            if not ke.has_operator(idname):
+                self.report({"ERROR"}, f"操作符不存在：{idname}")
+                return {"CANCELLED"}
+            target = {"kind": "operator", "id": idname, "props": {}}
+
+        data = config.load()
+        binding = {
+            "id": config.new_id("bd"),
+            "enabled": True,
+            "force_override": bool(wm.piebind_force_override),
+            "keymap": spec,
+            "key": key,
+            "target": target,
+        }
+        data["bindings"].append(binding)
+        config.save(data)
+        ke.apply(data)
+        wm.piebind_status = f"已保存绑定：{ke.key_label(key)} → {target['id']}"
+        return {"FINISHED"}
+
+
+class PIEBIND_OT_delete_binding(bpy.types.Operator):
+    bl_idname = "piebind.delete_binding"
+    bl_label = "删除绑定"
+    bl_options = {"REGISTER", "INTERNAL"}
+
+    binding_id: bpy.props.StringProperty()
+
+    def execute(self, context):
+        data = config.load()
+        data["bindings"] = [b for b in data["bindings"] if b.get("id") != self.binding_id]
+        config.save(data)
+        ke.apply(data)
+        return {"FINISHED"}
+
+
+class PIEBIND_OT_toggle_binding(bpy.types.Operator):
+    bl_idname = "piebind.toggle_binding"
+    bl_label = "启用/停用绑定"
+    bl_options = {"REGISTER", "INTERNAL"}
+
+    binding_id: bpy.props.StringProperty()
+
+    def execute(self, context):
+        data = config.load()
+        for binding in data["bindings"]:
+            if binding.get("id") == self.binding_id:
+                binding["enabled"] = not binding.get("enabled", True)
+                break
+        config.save(data)
+        ke.apply(data)
+        return {"FINISHED"}
+
+
+class PIEBIND_OT_test_pie(bpy.types.Operator):
+    bl_idname = "piebind.test_pie"
+    bl_label = "预览饼"
+    bl_options = {"REGISTER", "INTERNAL"}
+
+    pie_id: bpy.props.StringProperty()
+
+    def invoke(self, context, event):
+        pie.PIE_STATE["pie_id"] = self.pie_id
+        return bpy.ops.wm.call_menu_pie("INVOKE_DEFAULT", name=pie.PIE_MENU_ID)
+
+
+class PIEBIND_OT_select_slot(bpy.types.Operator):
+    bl_idname = "piebind.select_slot"
+    bl_label = "选择槽位"
+    bl_options = {"REGISTER", "INTERNAL"}
+
+    pos: bpy.props.StringProperty()
+
+    def execute(self, context):
+        context.window_manager.piebind_slot_pos = self.pos
+        return {"FINISHED"}
+
+
+class PIEBIND_OT_export_diagnostics(bpy.types.Operator, ExportHelper):
+    bl_idname = "piebind.export_diagnostics"
+    bl_label = "导出诊断 JSON"
+    bl_description = "导出环境与键位快照，便于在 issue 里排查（本地路径已脱敏）"
+    filename_ext = ".json"
+
+    filter_glob: bpy.props.StringProperty(default="*.json", options={"HIDDEN"})
+
+    def execute(self, context):
+        try:
+            with open(self.filepath, "w", encoding="utf-8") as fh:
+                fh.write(diagnostics.dumps())
+        except Exception as exc:
+            self.report({"ERROR"}, f"导出失败：{exc}")
+            return {"CANCELLED"}
+        self.report({"INFO"}, f"诊断已导出：{self.filepath}")
+        return {"FINISHED"}
+
+
+class PIEBIND_OT_copy_diagnostics(bpy.types.Operator):
+    bl_idname = "piebind.copy_diagnostics"
+    bl_label = "复制诊断到剪贴板"
+    bl_options = {"REGISTER", "INTERNAL"}
+
+    def execute(self, context):
+        try:
+            text = diagnostics.dumps()
+            context.window_manager.clipboard = text
+        except Exception as exc:
+            self.report({"ERROR"}, f"复制失败：{exc}")
+            return {"CANCELLED"}
+        self.report({"INFO"}, f"已复制 {len(text)} 字符的诊断信息")
+        return {"FINISHED"}
+
+
+CLASSES = (
+    PIEBIND_OT_call_pie,
+    PIEBIND_OT_capture_key,
+    PIEBIND_OT_apply,
+    PIEBIND_OT_unapply,
+    PIEBIND_OT_create_pie,
+    PIEBIND_OT_add_slot,
+    PIEBIND_OT_remove_slot,
+    PIEBIND_OT_create_binding,
+    PIEBIND_OT_delete_binding,
+    PIEBIND_OT_toggle_binding,
+    PIEBIND_OT_test_pie,
+    PIEBIND_OT_select_slot,
+    PIEBIND_OT_export_diagnostics,
+    PIEBIND_OT_copy_diagnostics,
+)

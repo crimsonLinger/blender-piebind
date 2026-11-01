@@ -1,0 +1,86 @@
+name: CI
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: Blender ${{ matrix.blender }}
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        blender: ["4.2", "4.5", "5.2"]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Resolve latest Blender patch
+        id: resolve
+        shell: bash
+        run: |
+          set -euo pipefail
+          BASE="https://download.blender.org/release/Blender${{ matrix.blender }}/"
+          FILE=$(curl -fsSL "$BASE" \
+            | grep -oE "blender-[0-9]+\.[0-9]+\.[0-9]+-linux-x64\.tar\.xz" \
+            | sort -V | tail -n1)
+          if [ -z "$FILE" ]; then
+            echo "No Linux build found for Blender ${{ matrix.blender }}" >&2
+            exit 1
+          fi
+          echo "file=$FILE" >> "$GITHUB_OUTPUT"
+          echo "url=$BASE$FILE" >> "$GITHUB_OUTPUT"
+          echo "Resolved $BASE$FILE"
+
+      - name: Cache Blender download
+        id: cache
+        uses: actions/cache@v4
+        with:
+          path: ~/blender-dl
+          key: blender-${{ matrix.blender }}-${{ steps.resolve.outputs.file }}
+
+      - name: Download Blender
+        if: steps.cache.outputs.cache-hit != 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p ~/blender-dl
+          curl -fL --retry 3 --retry-delay 2 \
+            -o ~/blender-dl/blender.tar.xz "${{ steps.resolve.outputs.url }}"
+
+      - name: Extract Blender
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p ~/blender
+          tar -xJf ~/blender-dl/blender.tar.xz -C ~/blender --strip-components=1
+          ~/blender/blender --version | head -n1
+
+      - name: Headless tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          ~/blender/blender -b --factory-startup --python-exit-code 1 \
+            --python tests/run_headless.py
+
+      - name: Build extension package
+        shell: bash
+        run: |
+          set -euo pipefail
+          ~/blender/blender --command extension build \
+            --source-dir src/piebind --output-dir dist
+          ls -l dist
+          ~/blender/blender --command extension validate dist/*.zip
+
+      - name: Upload package
+        uses: actions/upload-artifact@v4
+        with:
+          name: piebind-blender-${{ matrix.blender }}
+          path: dist/*.zip
+          if-no-files-found: error

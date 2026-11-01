@@ -1,0 +1,220 @@
+"""Headless 端到端测试。
+
+运行：
+  & 'D:\\Blender\\blender.exe' -b --factory-startup --python-exit-code 1 \
+      --python 'E:\\blender插件\\tests\\run_headless.py'
+"""
+
+import json
+import os
+import sys
+import tempfile
+import traceback
+
+import bpy
+
+ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+SRC = os.path.join(ROOT, "src")
+sys.path.insert(0, SRC)
+
+CONFIG_DIR = tempfile.mkdtemp(prefix="piebind-test-")
+os.environ["PIEBIND_CONFIG_DIR"] = CONFIG_DIR
+
+import piebind  # noqa: E402
+from piebind import api, config, keymap_engine as ke, ops  # noqa: E402
+
+PASSED = []
+FAILED = []
+
+
+def check(name, condition, detail=""):
+    if condition:
+        PASSED.append(name)
+        print(f"  PASS  {name}")
+    else:
+        FAILED.append(f"{name} :: {detail}")
+        print(f"  FAIL  {name}  {detail}")
+
+
+def section(title):
+    print(f"\n== {title} ==")
+
+
+def main():
+    piebind.register()
+
+    section("配置读写")
+    data = config.load()
+    check("默认配置为空", data["pies"] == [] and data["bindings"] == [])
+    pie = config.create_pie(data, "测试饼")
+    config.set_slot(data, pie["id"], "W", {
+        "kind": "operator", "idname": "mesh.bevel", "text": "倒角", "props": {},
+    })
+    config.save(data)
+    reloaded = config.load()
+    check("饼可持久化", len(reloaded["pies"]) == 1 and reloaded["pies"][0]["label"] == "测试饼")
+    check("槽位可持久化", reloaded["pies"][0]["slots"]["W"]["idname"] == "mesh.bevel")
+
+    section("键位标签")
+    label = ke.key_label({"type": "E", "alt": True, "shift": True})
+    check("标签格式", label == "Shift+Alt+E", label)
+    label = ke.key_label({"type": "ONE", "ctrl": True})
+    check("数字键标签", label == "Ctrl+1", label)
+
+    section("应用 / 复原（无冲突）")
+    data = config.load()
+    data["bindings"].append({
+        "id": "bd_test_1",
+        "enabled": True,
+        "force_override": False,
+        "keymap": {"name": "3D View", "space": "VIEW_3D", "region": "WINDOW"},
+        "key": {"type": "F10", "value": "PRESS", "ctrl": True, "alt": True, "shift": True},
+        "target": {"kind": "pie", "id": pie["id"], "props": {}},
+    })
+    config.save(data)
+    report = ke.apply(data)
+    check("创建了 1 条绑定", len(report["created"]) == 1, report)
+    addon_kc = bpy.context.window_manager.keyconfigs.addon
+    ours = [
+        kmi for km in addon_kc.keymaps
+        for kmi in km.keymap_items if kmi.idname == ke.CALL_PIE_IDNAME
+    ]
+    check("插件层出现我们的条目", len(ours) == 1, len(ours))
+    check("条目携带 pie_id", getattr(ours[0].properties, "pie_id", "") == pie["id"])
+    check("无冲突时 journal 清空", config.read_journal() is None)
+
+    result = ke.unapply()
+    check("卸载后条目清零", result["removed"] >= 1, result)
+    leftovers = [
+        kmi for km in addon_kc.keymaps
+        for kmi in km.keymap_items if (kmi.idname or "").startswith("piebind.")
+    ]
+    check("卸载后无残留", leftovers == [], len(leftovers))
+
+    section("dry-run 不落库")
+    data = config.load()
+    before = len([
+        kmi for km in addon_kc.keymaps for kmi in km.keymap_items
+    ])
+    dry = ke.apply(data, dry_run=True)
+    after = len([
+        kmi for km in addon_kc.keymaps for kmi in km.keymap_items
+    ])
+    check("dry-run 报告创建数", len(dry["created"]) == 1, dry)
+    check("dry-run 未真实创建", before == after, (before, after))
+
+    section("强制覆盖：静音与复原")
+    data = config.load()
+    spec = {"name": "3D View", "space": "VIEW_3D", "region": "WINDOW"}
+    km = ke.ensure_keymap(addon_kc, spec)
+    # 模拟另一个插件先占用了 SAME 键位
+    rival = km.keymap_items.new("wm.context_toggle", "F9", "PRESS", ctrl=True, alt=True, shift=True)
+    rival.properties.data_path = "scene.tool_settings.use_snap"
+    rival_key = {"type": "F9", "value": "PRESS", "ctrl": True, "alt": True, "shift": True}
+    rivals = [k for k in km.keymap_items if ke.combo_match(k, rival_key)]
+    check("模拟的干扰条目存在且激活", len(rivals) == 1 and rivals[0].active, [(r.active) for r in rivals])
+
+    data["bindings"][0]["force_override"] = True
+    data["bindings"][0]["key"] = rival_key
+    config.save(data)
+    report = ke.apply(data)
+    check("覆盖报告含静音项", len(report["muted"]) >= 1, report["muted"])
+    check("干扰条目被静音", rival.active is False, rival.active)
+    check("journal 已写入", config.read_journal() is not None)
+
+    ours = [k for k in km.keymap_items if k.idname == ke.CALL_PIE_IDNAME]
+    check("我们的条目处于激活", len(ours) == 1 and ours[0].active, len(ours))
+
+    ke.unapply()
+    check("复原后干扰条目恢复激活", rival.active is True, rival.active)
+    check("复原后 journal 清空", config.read_journal() is None)
+    try:
+        km.keymap_items.remove(rival)
+    except Exception:
+        pass
+
+    section("缺失操作符降级")
+    data = config.load()
+    data["bindings"].append({
+        "id": "bd_missing",
+        "enabled": True,
+        "force_override": False,
+        "keymap": {"name": "3D View", "space": "VIEW_3D", "region": "WINDOW"},
+        "key": {"type": "F8", "ctrl": True, "shift": True, "alt": True},
+        "target": {"kind": "operator", "id": "piebind.nonexistent_op", "props": {}},
+    })
+    config.save(data)
+    report = ke.apply(data)
+    check("缺失操作符被跳过", any(s.get("binding") == "bd_missing" for s in report["skipped"]), report["skipped"])
+    ke.unapply()
+
+    section("面板属性与重复键检测")
+    check("WM 捕获属性已注册", hasattr(bpy.types.WindowManager, "piebind_capture_label"))
+    check("WM 图标属性已注册", hasattr(bpy.types.WindowManager, "piebind_slot_icon"))
+    check("WM 方位属性已注册", hasattr(bpy.types.WindowManager, "piebind_slot_pos"))
+
+    data = config.load()
+    data["bindings"] = [
+        b for b in data["bindings"] if b.get("id") == "bd_test_1"
+    ]
+    dup_source = dict(data["bindings"][0])
+    dup_source["id"] = "bd_dup"
+    data["bindings"].append(dup_source)
+    config.save(data)
+    dups = ke.duplicate_bindings(data)
+    check("重复键被识别", len(dups) == 1 and dups[0]["key"] == ke.key_label(data["bindings"][0]["key"]), dups)
+    report = ke.apply(data, dry_run=True)
+    check("apply 报告含重复信息", len(report.get("duplicates", [])) == 1, report.get("duplicates"))
+
+    section("UI 回调")
+    wm = bpy.context.window_manager
+    ctx = bpy.context
+    check("捕获操作符已注册", hasattr(bpy.types, "PIEBIND_OT_capture_key"))
+    check("选择槽位操作符已注册", hasattr(bpy.types, "PIEBIND_OT_select_slot"))
+    keymap_items = ops._refresh_keymap_items(wm, ctx)
+    check("keymap 枚举可用", len(keymap_items) >= 1, len(keymap_items))
+    pie_items = ops._refresh_pie_items(wm, ctx)
+    check("饼枚举可用", len(pie_items) >= 1, pie_items)
+    pos_items = ops._refresh_slot_pos(wm, ctx)
+    check("方位枚举 8 项", len(pos_items) == 8, len(pos_items))
+    try:
+        op_items = ops._operator_choices(wm, ctx)
+        check("操作符枚举可用", len(op_items) >= 1, len(op_items))
+    except Exception as exc:
+        check("操作符枚举可用", False, exc)
+
+    section("API")
+    described = api.call("describe")
+    check("describe 可用", described.get("ok") is True and "bind" in described["data"]["actions"])
+    unknown = api.call("nope_action")
+    check("未知动作返回结构化错误", unknown.get("ok") is False and unknown["error"]["code"] == "UNKNOWN_ACTION")
+    found = api.call("search_operators", query="bevel", limit=5)
+    check("操作符搜索非空", found.get("ok") and len(found["data"]) > 0, found)
+    conflicts = api.call("check_conflict", keymap="3D View", key={"type": "T"})
+    check("冲突检测可调用", conflicts.get("ok") is True)
+    dry = api.call("bind", keymap="3D View", key={"type": "F7", "ctrl": True, "alt": True},
+                   target={"kind": "pie", "id": pie["id"]}, dry_run=True)
+    check("api bind dry-run 返回 would_bind", dry.get("ok") is True and "would_bind" in dry["data"], dry)
+
+    snap = api.call("diagnostics")
+    check("诊断快照可用", snap.get("ok") is True and snap["data"]["tool"]["name"] == "PieBind", snap.get("error"))
+    check("诊断含层信息", len(snap["data"].get("layers", [])) >= 1, snap["data"].get("layers"))
+    check("诊断路径已脱敏", "\\Users\\" not in str(snap["data"]["config"]["dir"]).replace("/", "\\")
+          or snap["data"]["config"]["dir"].startswith("~"), snap["data"]["config"]["dir"])
+
+    section("清单")
+    print(f"\nPASSED {len(PASSED)} / FAILED {len(FAILED)}")
+    for item in FAILED:
+        print("  FAILED:", item)
+    if FAILED:
+        raise SystemExit(1)
+    print("\nALL TESTS PASSED")
+
+
+try:
+    main()
+except SystemExit:
+    raise
+except Exception:
+    traceback.print_exc()
+    raise SystemExit(1)

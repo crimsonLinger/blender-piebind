@@ -1,0 +1,27 @@
+schema_version = "1.0.0"
+
+id = "piebind"
+version = "0.1.0"
+name = "PieBind"
+tagline = "Keymap inspection, reversible overrides and lightweight pies"
+maintainer = "PieBind contributors"
+type = "add-on"
+
+tags = ["User Interface", "Pipeline"]
+
+blender_version_min = "4.2.0"
+
+license = [
+  "SPDX:GPL-3.0-or-later",
+]
+
+[permissions]
+files = "Save bindings and journals in the Blender config folder"
+
+[build]
+paths_exclude_pattern = [
+  "__pycache__/",
+  "/.git/",
+  "/*.zip",
+  "*.pyc",
+]

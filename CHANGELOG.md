@@ -1,0 +1,119 @@
+# CHANGELOG
+
+倒序记录。每轮迭代追加：`## 日期 · 第N轮：一句话主题`，末尾写「当前状态 / 下一步 / 未验证」。
+
+## 2026-11-01 · 第4轮：工程化（README/许可证/CI/诊断）+ 40 项测试全绿 + 仓库初始化
+
+### 结论
+- **文档**：新增英文 [README.md](README.md) 与中文 [README_zh.md](README_zh.md)，含功能、安装、快速开始、**诚实版已知限制**、agent API 示例、诊断说明、开发命令、路线图；顶部即写明"不是 Pie Menu Editor 替代品"。
+- **许可证**：`LICENSE` = GPL-3.0 全文（35,149 字节，来自 gnu.org），与 manifest 的 `SPDX:GPL-3.0-or-later` 一致。
+- **CI**：`.github/workflows/ci.yml`，矩阵 **Blender 4.2 / 4.5 / 5.2**；运行时从 download.blender.org 解析最新补丁版 → 缓存 → 解压 → 跑 headless 测试 → 构建并校验扩展包 → 上传产物。
+- **诊断导出**（发 issue 用）：`diagnostics.py` 生成环境快照（版本、三层 keymap 规模、插件键位归属、绑定、重复键、addons 列表），**本地路径脱敏为 `~`**；三种调用方式：面板「诊断」按钮（复制到剪贴板）、`piebind.export_diagnostics`（存文件）、`api.call("diagnostics")`。
+- **issue 模板**：`.github/ISSUE_TEMPLATE/bug_report.yml`，强制填 Blender 版本/系统/安装方式，勾选是否附诊断。
+- **仓库**：`.gitattributes`（统一 LF）+ 本地 git 初始化并提交，21 文件 / 4028 行。
+
+### 验证
+- headless 测试 **40/40 通过**（新增：诊断快照可用、含层信息、路径脱敏）。
+- 扩展包重建 `dist/piebind-0.1.0.zip`（23,064 字节），`Success parsing TOML`。
+- CI 尚未在 GitHub 上真实跑过（本地无 GitHub 仓库/凭据）。
+
+### 当前状态
+- v0.1 代码、文档、打包、测试、CI 配置齐备，**唯一缺口是 GUI 实按验收**（显卡驱动崩溃未恢复）。
+- `dist/` 已被 .gitignore 排除，发布时作为 Release 附件上传。
+
+### 下一步
+1. 环境恢复 → `tests\run_gui_probe.ps1` 拿实按证据。
+2. 建远程仓库、推 main、打 `v0.1.0` tag、挂 zip；观察 CI 首跑（4.2 可能出现 API 差异，需按日志修）。
+3. v0.2 视反馈决定：宏 / 嵌套菜单 / 参数表单。
+
+### 未验证
+- GitHub Actions 实跑结果（尤其 Blender 4.2 的 `keymap_items.new` 参数差异）。
+- 面板渲染与实按行为。
+- `ubuntu-24.04` runner 上 Blender 后台模式所需系统库是否齐全。
+
+## 2026-11-01 · 第3轮：交互打磨（罗盘点选/改键/图标/体检页）+ 37 项测试全绿
+
+### 结论
+- 测试从 26 → **37 项全绿**，新增覆盖：WM 属性注册、UI 动态枚举回调（keymap/饼/方位/操作符）、重复键识别、apply 报告含 duplicates。
+- 键位引擎：操作符 id 与标签**缓存**（`invalidate_cache()` 在体检页"重新扫描"时清空），搜索列表从每次全量遍历改为缓存列表。
+- 新增 `duplicate_bindings()`：检测我们自己的绑定互相撞键，并写进 `apply()` 报告的 `duplicates`，面板顶部直接告警。
+- 面板重做：
+  - **罗盘可点选**：3×3 九宫格，点方位即选中该槽（`piebind.select_slot`），当前槽高亮；
+  - **槽位编辑器**：搜索 + 操作符 + 文字 + **图标**（30 个常用图标）+ 写入/清空；选操作符时自动填文字；
+  - **绑定行**：按 keymap+键位排序，显示操作符**可读名**（不再只显示 idname）、冲突徽章按严重度取图标、被占用者单独一行、行内 `REC` 按钮**就地改键**（捕获后直接写回并重新应用）；
+  - **新建绑定**：撞键且未勾强制覆盖时给出明确提示（"这条绑定很可能不会生效"）；
+  - **体检页**：按来源统计（`kekit×3` 这类）、标记与本插件同键的条目、`重新扫描` 按钮；
+  - 顶部状态行：已应用/静音/绑定数 + 撞键告警。
+- 扩展包重建并校验通过：`dist/piebind-0.1.0.zip`（21.5 KB）。
+
+### 阻塞（未变）
+- GUI 仍无法启动：`nvoglv64.dll` / `DrvPresentBuffers`，22:25 再次复测仍崩溃。因此**实按验证与面板截图仍未取得**。
+
+### 当前状态
+- 代码侧 v0.1 功能齐备：捕获、重绑、饼（8 槽/图标/置灰）、冲突检测与归因、强制覆盖 + journal 复原、导入导出、agent API、体检页、扩展打包。
+- 缺：README/LICENSE/CI/诊断导出/i18n（M4），以及 GUI 实按验收。
+
+### 下一步
+1. 环境恢复后跑 `tests\run_gui_probe.ps1`（脚本已就绪，90s 等待 + 焦点校验）。
+2. M4：README（中英）+ LICENSE + GitHub Actions（headless 矩阵 4.2/4.5/5.2）+ 诊断导出。
+3. 可选：面板内"自检"按钮，让用户一键验证覆盖是否生效（把探针逻辑搬进插件）。
+
+### 未验证
+- 面板实际渲染效果（无 GUI 无法截图）。
+- 真实键位按下瞬间的覆盖行为。
+- 4.2 LTS 兼容。
+
+## 2026-11-01 · 第2轮：headless 测试 26/26 通过，扩展包可构建可安装；GUI 实按验证被 GPU 驱动崩溃阻塞
+
+### 结论
+- `tests/run_headless.py` 全绿 **26/26**：配置持久化、键位标签、应用/复原、dry-run 不落库、强制覆盖静音与恢复、journal 写入与清理、缺失操作符降级、API 动作与结构化错误。
+- 修掉两个真实缺陷：
+  1. `bpy.ops` 的属性访问永远不报错，`hasattr` 判不出操作符是否存在 → 改用 `get_rna_type()` 校验（`piebind.nonexistent_op` 现在能正确跳过）；
+  2. `dry_run` 原本只跳过静音、仍会真实创建键位 → 现在 dry-run 完全不建项、不建 keymap。
+- `apply()` 重入前先恢复上一轮静音，避免反复应用导致状态漂移。
+- 扩展包链路打通：`--command extension build` → `validate` 通过 → 解压到隔离目录 + `BLENDER_USER_EXTENSIONS` → `addon_enable` 成功、`addons[mod].preferences` 为 PieBind 实例、`addon_disable` 干净退出。产物 `dist/piebind-0.1.0.zip`（19.5 KB）。
+- manifest 两处被官方校验卡住并修正：`permissions.files` 理由必须 ≤64 字符；`tags` 只能用官方枚举（`Interface` 无效，改用 `User Interface`/`Pipeline`）。
+
+### 阻塞
+- **GUI 实按验证当前无法进行**：本机 Blender 5.2.3 启动即 `EXCEPTION_ACCESS_VIOLATION`（`nvoglv64.dll` / `DrvPresentBuffers`），空脚本、`--factory-startup`、`--gpu-backend vulkan`、关闭 Auto HDR 均复现；同一命令在 22:04–22:10 曾正常，属驱动/显示会话侧问题，与插件代码无关。
+- `tests/gui_probe.py` + `run_gui_probe.ps1` 已就绪（含 90s 等待、焦点校验、防误输入），等环境恢复即可一键执行。
+
+### 当前状态
+- 可用：配置模型、键位引擎（应用/静音/复原/journal 自愈）、单一静态饼菜单类、捕获器、偏好面板、`api.call` 单入口、扩展打包。
+- 未做：README/LICENSE/CI、i18n、诊断导出、GUI 实按验收。
+
+### 下一步
+1. 环境恢复后执行 `powershell -File tests\run_gui_probe.ps1`，拿到「静音内置 T → 实按 T → use_snap 翻转 → 复原」的证据。
+2. M2：面板交互打磨（槽位编辑、冲突徽章、体检页）。
+3. M4：README（双语）+ LICENSE + GitHub Actions（headless 测试矩阵）。
+
+### 未验证
+- 真实键位上的覆盖是否在**按下瞬间**生效（结构性证据已具备：内置项 inactive + 我们的项 active + journal 落盘）。
+- Blender 4.2 LTS 兼容性（本机仅 5.2.3）。
+- 崩溃后 journal 自愈的真实进程级场景（脚本内已模拟并通过）。
+
+## 2026-11-01 · 第1轮：立项 + 键位引擎与饼菜单骨架
+
+### 结论
+- 确定定位：**键位体检 + 可逆覆盖 + 轻量饼（8 槽）+ 进程内 agent API**，不做 PME 平替。
+- 实测确认关键技术前提（Blender 5.2.3）：三层键位共 6467 条、全量扫描 8.8 ms；插件键位归因 6/6 成功；饼菜单槽位顺序为 W/E/S/N/NW/NE/SW/SE。
+- 关键设计决策：
+  1. 单一静态菜单类 `PIEBIND_MT_pie` + 调用态传参（避免动态注册 `bl_idname` 冲突）；
+  2. 覆盖 = 把同 combo 的既有条目 `active=False` 并写 journal，复原按「仍处于我们造成的静音状态」判定；
+  3. 配置存 JSON（原子写 + 备份），放弃 addon preferences PropertyGroup，原因是嵌套饼/槽结构在 RNA 里表达成本高且不利于 api/导入导出；
+  4. 冲突扫描覆盖 active / user / addon 三层并去重。
+- 首版代码：`config.py` / `keymap_engine.py` / `pie.py` / `ops.py` / `ui.py` / `api.py` / `__init__.py`。
+
+### 当前状态
+- headless 端到端测试：见文末结果。
+- GUI 探针：验证「静音内置项 → 我们的项生效 → 复原」。
+
+### 下一步
+- M2：捕获器与冲突提示 UI 打磨、饼编辑罗盘化。
+- M3：`api.call` 动作补齐 dry-run 事务与回滚。
+- M4：manifest / CI / i18n / README / 诊断导出。
+
+### 未验证
+- Blender 4.2 LTS 兼容性（本机只有 5.2.3）。
+- 崩溃后 journal 自愈（需强杀进程测试）。
+- 跨用户/跨机器的配置导入导出。
