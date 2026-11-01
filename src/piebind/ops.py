@@ -419,6 +419,29 @@ def _clear_status(context):
             continue
 
 
+def _schedule_redraw():
+    """强制重绘一次：偏好设置窗口不会因属性变化自动刷新。"""
+
+    def _redraw():
+        try:
+            wm = bpy.context.window_manager
+            win = getattr(bpy.context, "window", None)
+            if win is None and len(wm.windows):
+                win = wm.windows[0]
+            if win is None:
+                return None
+            with bpy.context.temp_override(window=win):
+                bpy.ops.wm.redraw_timer(type="DRAW_WIN_SWAP", iterations=1)
+        except Exception:
+            pass
+        return None
+
+    try:
+        bpy.app.timers.register(_redraw, first_interval=0.01)
+    except Exception:
+        pass
+
+
 class PIEBIND_OT_capture_key(bpy.types.Operator):
     bl_idname = "piebind.capture_key"
     bl_label = "捕获快捷键"
@@ -431,6 +454,7 @@ class PIEBIND_OT_capture_key(bpy.types.Operator):
         wm.piebind_capture_label = "请按下组合键…（Esc 取消）"
         _set_status(context, "PieBind：请按下组合键…")
         context.window_manager.modal_handler_add(self)
+        _schedule_redraw()
         return {"RUNNING_MODAL"}
 
     def _finish(self, context, label, key):
@@ -455,6 +479,7 @@ class PIEBIND_OT_capture_key(bpy.types.Operator):
             except Exception:
                 pass
         _clear_status(context)
+        _schedule_redraw()
         return {"FINISHED"}
 
     def modal(self, context, event):
@@ -475,6 +500,7 @@ class PIEBIND_OT_capture_key(bpy.types.Operator):
         if event.type in CANCEL_EVENTS:
             context.window_manager.piebind_capture_label = "已取消"
             _clear_status(context)
+            _schedule_redraw()
             return {"CANCELLED"}
         if event.type in MODIFIER_EVENTS:
             return {"RUNNING_MODAL"}
