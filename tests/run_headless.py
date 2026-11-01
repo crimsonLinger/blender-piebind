@@ -76,6 +76,19 @@ def main():
     label = ke.key_label({"type": "ONE", "ctrl": True})
     check("数字键标签", label == "Ctrl+1", label)
 
+    section("手动键位解析")
+    parsed = ops.parse_key_text("TAB")
+    check("TAB 解析", parsed and parsed["type"] == "TAB", parsed)
+    parsed = ops.parse_key_text("ctrl+shift+e")
+    check("组合键解析", parsed and parsed["type"] == "E" and parsed["ctrl"] and parsed["shift"], parsed)
+    parsed = ops.parse_key_text("F8")
+    check("F 键解析", parsed and parsed["type"] == "F8", parsed)
+    parsed = ops.parse_key_text("1")
+    check("数字键解析", parsed and parsed["type"] == "ONE", parsed)
+    parsed = ops.parse_key_text("alt+LMB")
+    check("鼠标键解析", parsed and parsed["type"] == "LEFTMOUSE" and parsed["alt"], parsed)
+    check("空输入返回 None", ops.parse_key_text("  ") is None)
+
     section("应用 / 复原（无冲突）")
     data = config.load()
     data["bindings"].append({

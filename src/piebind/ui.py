@@ -243,14 +243,17 @@ class PIEBIND_AP_Preferences(bpy.types.AddonPreferences):
         row.label(text=wm.piebind_capture_label or "（未捕获）")
         row.operator("piebind.capture_key", text="捕获", icon="REC")
         row = box.row(align=True)
+        row.prop(wm, "piebind_key_manual", text="手动键位")
+        row.operator("piebind.apply_manual_key", text="应用", icon="CHECKMARK")
+        row = box.row(align=True)
         row.prop(wm, "piebind_keymap", text="Keymap")
         row = box.row(align=True)
         row.prop(wm, "piebind_target_kind", expand=True)
         if wm.piebind_target_kind == "pie":
-            row = box.row(align=True)
-            row.label(text="目标饼：")
-            for item in pies[:5]:
-                op = row.operator(
+            box.label(text="目标饼（点一下选中）：")
+            col = box.column(align=True)
+            for item in pies:
+                op = col.operator(
                     "piebind.select_pie",
                     text=item.get("label") or item["id"],
                     depress=(item["id"] == wm.piebind_pie),
@@ -292,10 +295,10 @@ class PIEBIND_AP_Preferences(bpy.types.AddonPreferences):
         row.operator("piebind.create_pie", text="新建饼", icon="ADD")
 
         if pies:
-            row = box.row(align=True)
-            row.label(text="编辑：")
-            for item in pies[:6]:
-                op = row.operator(
+            box.label(text="选择要编辑的饼：")
+            col = box.column(align=True)
+            for item in pies:
+                op = col.operator(
                     "piebind.select_pie",
                     text=item.get("label") or item["id"],
                     depress=(item["id"] == wm.piebind_pie),

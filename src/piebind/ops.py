@@ -71,6 +71,57 @@ def _refresh_slot_pos(self, context):
 
 SLOT_POS_ITEMS = [(pos, pie.SLOT_LABELS[pos], "") for pos in pie.SLOT_ORDER]
 
+_DIGIT_TYPES = {
+    "1": "ONE", "2": "TWO", "3": "THREE", "4": "FOUR", "5": "FIVE",
+    "6": "SIX", "7": "SEVEN", "8": "EIGHT", "9": "NINE", "0": "ZERO",
+}
+_KEY_ALIASES = {
+    "tab": "TAB", "space": "SPACE", "spacebar": "SPACE",
+    "enter": "RET", "return": "RET", "numpadenter": "NUMPAD_ENTER",
+    "esc": "ESC", "escape": "ESC", "backspace": "BACKSPACE", "del": "DEL",
+    "delete": "DEL", "home": "HOME", "end": "END",
+    "pageup": "PAGEUP", "pagedown": "PAGEDOWN", "insert": "INSERT",
+    "up": "UP_ARROW", "down": "DOWN_ARROW", "left": "LEFT_ARROW", "right": "RIGHT_ARROW",
+    "lmb": "LEFTMOUSE", "rmb": "RIGHTMOUSE", "mmb": "MIDDLEMOUSE",
+    "wheelup": "WHEELUPMOUSE", "wheeldown": "WHEELDOWNMOUSE",
+    "menu": "APP", "quote": "QUOTE", "grave": "ACCENT_GRAVE",
+}
+_MOD_ALIASES = {
+    "ctrl": "ctrl", "control": "ctrl",
+    "shift": "shift",
+    "alt": "alt", "option": "alt",
+    "os": "oskey", "cmd": "oskey", "win": "oskey", "super": "oskey",
+}
+
+
+def parse_key_text(text):
+    """把 'ctrl+shift+e' / 'tab' / 'F8' 解析成 key 字典。"""
+    tokens = [t for t in str(text or "").replace("+", " ").split() if t]
+    if not tokens:
+        return None
+    key = {"value": "PRESS", "ctrl": False, "shift": False, "alt": False,
+           "oskey": False, "any": False, "key_modifier": "NONE"}
+    key_type = None
+    for token in tokens:
+        low = token.lower()
+        if low in _MOD_ALIASES:
+            key[_MOD_ALIASES[low]] = True
+            continue
+        if low in _DIGIT_TYPES:
+            key_type = _DIGIT_TYPES[low]
+        elif low in _KEY_ALIASES:
+            key_type = _KEY_ALIASES[low]
+        elif low.startswith("numpad") and low[6:].isdigit():
+            key_type = "NUMPAD_" + _DIGIT_TYPES.get(low[6:], low[6:].upper())
+        elif len(token) == 1 and token.isalpha():
+            key_type = token.upper()
+        else:
+            key_type = token.upper().replace("-", "_").replace(" ", "_")
+    if not key_type:
+        return None
+    key["type"] = key_type
+    return key
+
 MODE_ITEMS = [
     ("AUTO", "不设置", ""),
     ("OBJECT", "物体模式", ""),
@@ -192,6 +243,10 @@ WM_PROPS = {
         name="捕获结果", default="", options={"SKIP_SAVE"}
     ),
     "piebind_key_json": lambda: bpy.props.StringProperty(default="", options={"SKIP_SAVE"}),
+    "piebind_key_manual": lambda: bpy.props.StringProperty(
+        name="手动键位", default="", options={"SKIP_SAVE"},
+        description="例如：TAB、ctrl+shift+e、F8、alt+LEFTMOUSE",
+    ),
     "piebind_keymap": lambda: bpy.props.EnumProperty(
         name="Keymap", items=_refresh_keymap_items, options={"SKIP_SAVE"},
     ),
@@ -252,6 +307,24 @@ def unregister_wm_props():
 
 
 # ---------------------------------------------------------------- operators
+class PIEBIND_OT_apply_manual_key(bpy.types.Operator):
+    bl_idname = "piebind.apply_manual_key"
+    bl_label = "应用手动键位"
+    bl_options = {"REGISTER", "INTERNAL"}
+
+    def execute(self, context):
+        wm = context.window_manager
+        key = parse_key_text(wm.piebind_key_manual)
+        if key is None:
+            self.report({"ERROR"}, "无法解析，请写成 TAB / ctrl+shift+e / F8")
+            return {"CANCELLED"}
+        wm.piebind_key_json = json.dumps(key)
+        wm.piebind_capture_label = f"手动：{ke.key_label(key)}"
+        if not wm.piebind_slot_text:
+            pass
+        return {"FINISHED"}
+
+
 class PIEBIND_OT_call_pie(bpy.types.Operator):
     bl_idname = "piebind.call_pie"
     bl_label = "调用饼菜单"
@@ -693,4 +766,5 @@ CLASSES = (
     PIEBIND_OT_dispatch,
     PIEBIND_OT_pick_operator,
     PIEBIND_OT_select_pie,
+    PIEBIND_OT_apply_manual_key,
 )
