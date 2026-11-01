@@ -2,6 +2,27 @@
 
 倒序记录。每轮迭代追加：`## 日期 · 第N轮：一句话主题`，末尾写「当前状态 / 下一步 / 未验证」。
 
+## 2026-11-02 · 第14轮：修 `log_path` 未定义导致的捕获崩溃（并补回归测试）
+
+### 现象（用户截图）
+```
+File ".../ops.py", line 450, in _finish
+    if log_path:
+NameError: name 'log_path' is not defined
+```
+
+### 原因
+第 13 轮把「CAPTURED …」日志写进 `_finish`，但 `log_path` 是 `modal()` 的局部变量，
+`_finish()` 里没有定义。属于我自己的疏漏。
+
+### 修复
+- `_finish()` 内重新 `log_path = os.environ.get("PIEBIND_DEBUG_CAPTURE")`。
+- 新增回归测试：直接以桩对象调用 `PIEBIND_OT_capture_key._finish()`，断言不抛异常且写入
+  `piebind_key_json`（这类“入口即崩”的错误以后会被 headless 测试拦住）。
+
+### 验证
+- headless **58/58** 通过；包 29.7 KB，已覆盖安装并启用。
+
 ## 2026-11-02 · 第13轮：按用户日志定位捕获丢键根因 —— 50ms 防抖误伤
 
 ### 日志分析（用户提供 `%TEMP%\piebind_capture.log`）

@@ -447,6 +447,7 @@ class PIEBIND_OT_capture_key(bpy.types.Operator):
             wm.piebind_capture_label = f"已改键：{label}"
         else:
             wm.piebind_capture_label = label
+        log_path = os.environ.get("PIEBIND_DEBUG_CAPTURE")
         if log_path:
             try:
                 with open(log_path, "a", encoding="utf-8") as fh:

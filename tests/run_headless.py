@@ -76,6 +76,20 @@ def main():
     label = ke.key_label({"type": "ONE", "ctrl": True})
     check("数字键标签", label == "Ctrl+1", label)
 
+    section("捕获回调")
+    class _CaptureStub:
+        binding_id = ""
+
+    try:
+        result = ops.PIEBIND_OT_capture_key._finish(
+            _CaptureStub(), bpy.context, "Tab", {"type": "TAB", "value": "PRESS"}
+        )
+        check("捕获 _finish 正常返回", result == {"FINISHED"}, result)
+        check("捕获结果写入属性", json.loads(bpy.context.window_manager.piebind_key_json)["type"] == "TAB",
+              bpy.context.window_manager.piebind_key_json)
+    except Exception as exc:
+        check("捕获 _finish 正常返回", False, f"{type(exc).__name__}: {exc}")
+
     section("手动键位解析")
     parsed = ops.parse_key_text("TAB")
     check("TAB 解析", parsed and parsed["type"] == "TAB", parsed)
