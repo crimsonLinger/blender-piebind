@@ -128,8 +128,37 @@ def _operator_choices(self, context):
     query = getattr(self, "piebind_op_query", "")
     hits = ke.search_operators(query, limit=40)
     if not hits:
-        return [("NONE", "(无匹配操作符)", "")]
-    return [(idn, f"{ke.operator_label(idn)}  ·  {idn}", "") for idn in hits]
+        return [("NONE", "(no match)", "")]
+    return [(idn, f"{ke.operator_label(idn)} - {idn}", "") for idn in hits]
+
+
+def _on_query_update(self, context):
+    """输入时把当前选择指向第一条命中，避免选到失效值。"""
+    hits = ke.search_operators(getattr(self, "piebind_op_query", ""), limit=40)
+    if not hits:
+        return
+    try:
+        self.piebind_op_choice = hits[0]
+    except Exception:
+        pass
+
+
+class PIEBIND_OT_pick_operator(bpy.types.Operator):
+    bl_idname = "piebind.pick_operator"
+    bl_label = "选择操作符"
+    bl_options = {"REGISTER", "INTERNAL"}
+
+    idname: bpy.props.StringProperty()
+
+    def execute(self, context):
+        wm = context.window_manager
+        if not ke.has_operator(self.idname):
+            self.report({"ERROR"}, f"操作符不存在：{self.idname}")
+            return {"CANCELLED"}
+        wm.piebind_op_choice = self.idname
+        if not wm.piebind_slot_text:
+            wm.piebind_slot_text = ke.operator_label(self.idname)
+        return {"FINISHED"}
 
 
 WM_PROPS = {
@@ -138,7 +167,7 @@ WM_PROPS = {
     ),
     "piebind_key_json": lambda: bpy.props.StringProperty(default="", options={"SKIP_SAVE"}),
     "piebind_keymap": lambda: bpy.props.EnumProperty(
-        name="Keymap", items=_refresh_keymap_items
+        name="Keymap", items=_refresh_keymap_items, options={"SKIP_SAVE"},
     ),
     "piebind_target_kind": lambda: bpy.props.EnumProperty(
         name="目标类型",
@@ -148,21 +177,24 @@ WM_PROPS = {
     "piebind_op_query": lambda: bpy.props.StringProperty(
         name="搜索", default="", options={"SKIP_SAVE"}, update=_on_query_update,
     ),
-    "piebind_op_choice": lambda: bpy.props.EnumProperty(
-        name="操作符", items=_operator_choices, update=_on_op_choice,
+    # 动态枚举在 WindowManager 上不可靠（下拉不刷新 items），改用字符串 + 按钮列表
+    "piebind_op_choice": lambda: bpy.props.StringProperty(
+        name="操作符", default="", options={"SKIP_SAVE"},
     ),
-    "piebind_pie": lambda: bpy.props.EnumProperty(name="饼菜单", items=_refresh_pie_items),
+    "piebind_pie": lambda: bpy.props.EnumProperty(
+        name="饼菜单", items=_refresh_pie_items, options={"SKIP_SAVE"},
+    ),
     "piebind_force_override": lambda: bpy.props.BoolProperty(
         name="强制覆盖", default=False,
     ),
     "piebind_slot_pos": lambda: bpy.props.EnumProperty(
-        name="方位", items=_refresh_slot_pos
+        name="方位", items=_refresh_slot_pos, options={"SKIP_SAVE"},
     ),
     "piebind_slot_text": lambda: bpy.props.StringProperty(
         name="文字", default="", options={"SKIP_SAVE"}
     ),
     "piebind_slot_icon": lambda: bpy.props.EnumProperty(
-        name="图标", items=ICON_ITEMS
+        name="图标", items=ICON_ITEMS, options={"SKIP_SAVE"},
     ),
     "piebind_new_pie_label": lambda: bpy.props.StringProperty(
         name="饼名称", default="新建饼", options={"SKIP_SAVE"}
@@ -569,4 +601,5 @@ CLASSES = (
     PIEBIND_OT_export_diagnostics,
     PIEBIND_OT_copy_diagnostics,
     PIEBIND_OT_dispatch,
+    PIEBIND_OT_pick_operator,
 )

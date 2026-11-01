@@ -37,6 +37,24 @@ def _worst(occupants):
     return ""
 
 
+def _draw_operator_picker(layout, wm):
+    """搜索 + 结果按钮 + 手填字段；不依赖动态枚举。"""
+    layout.prop(wm, "piebind_op_query", text="搜索")
+    hits = ke.search_operators(wm.piebind_op_query, limit=6)
+    if hits:
+        col = layout.column(align=True)
+        for idn in hits:
+            op = col.operator(
+                "piebind.pick_operator",
+                text=f"{ke.operator_label(idn)} - {idn}",
+            )
+            op.idname = idn
+    chosen = getattr(wm, "piebind_op_choice", "")
+    if chosen and ke.has_operator(chosen):
+        layout.label(text=f"已选：{ke.operator_label(chosen)}", icon="CHECKMARK")
+    layout.prop(wm, "piebind_op_choice", text="操作符 ID")
+
+
 def _slot_summary(slot):
     if not slot:
         return "—"
@@ -231,8 +249,7 @@ class PIEBIND_AP_Preferences(bpy.types.AddonPreferences):
         if wm.piebind_target_kind == "pie":
             box.prop(wm, "piebind_pie", text="目标饼")
         else:
-            box.prop(wm, "piebind_op_query", text="搜索")
-            box.prop(wm, "piebind_op_choice", text="操作符")
+            _draw_operator_picker(box, wm)
         box.prop(wm, "piebind_force_override")
 
         if wm.piebind_key_json:
@@ -273,8 +290,7 @@ class PIEBIND_AP_Preferences(bpy.types.AddonPreferences):
                 editor = box.box()
                 editor.label(text=f"编辑槽位 · {pie.SLOT_LABELS[wm.piebind_slot_pos]}", icon="EDIT")
                 editor.prop(wm, "piebind_slot_pos", text="方位")
-                editor.prop(wm, "piebind_op_query", text="搜索")
-                editor.prop(wm, "piebind_op_choice", text="操作符")
+                _draw_operator_picker(editor, wm)
                 row = editor.row(align=True)
                 row.prop(wm, "piebind_slot_text", text="文字")
                 row.prop(wm, "piebind_slot_icon", text="图标")

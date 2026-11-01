@@ -268,6 +268,9 @@ def operator_label(idname):
         label = op.get_rna_type().name or idname
     except Exception:
         pass
+    # 只保留 ASCII 标签：某些语言/字体组合下非 ASCII 的枚举标签会显示成乱码
+    if not label.isascii():
+        label = idname.split(".", 1)[-1].replace("_", " ").title()
     _OP_CACHE["labels"][idname] = label
     return label
 
