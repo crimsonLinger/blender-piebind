@@ -2,6 +2,7 @@
 
 import json
 import os
+import time
 
 import bpy
 from bpy_extras.io_utils import ExportHelper
@@ -243,10 +244,6 @@ WM_PROPS = {
         name="捕获结果", default="", options={"SKIP_SAVE"}
     ),
     "piebind_key_json": lambda: bpy.props.StringProperty(default="", options={"SKIP_SAVE"}),
-    "piebind_key_manual": lambda: bpy.props.StringProperty(
-        name="手动键位", default="", options={"SKIP_SAVE"},
-        description="例如：TAB、ctrl+shift+e、F8、alt+LEFTMOUSE",
-    ),
     "piebind_keymap": lambda: bpy.props.EnumProperty(
         name="Keymap", items=_refresh_keymap_items, options={"SKIP_SAVE"},
     ),
@@ -307,22 +304,70 @@ def unregister_wm_props():
 
 
 # ---------------------------------------------------------------- operators
-class PIEBIND_OT_apply_manual_key(bpy.types.Operator):
-    bl_idname = "piebind.apply_manual_key"
-    bl_label = "应用手动键位"
+class PIEBIND_OT_delete_pie(bpy.types.Operator):
+    bl_idname = "piebind.delete_pie"
+    bl_label = "删除饼"
     bl_options = {"REGISTER", "INTERNAL"}
+
+    pie_id: bpy.props.StringProperty()
 
     def execute(self, context):
         wm = context.window_manager
-        key = parse_key_text(wm.piebind_key_manual)
-        if key is None:
-            self.report({"ERROR"}, "无法解析，请写成 TAB / ctrl+shift+e / F8")
+        pie_id = self.pie_id or getattr(wm, "piebind_pie", "")
+        data = config.load()
+        pie_data = config.find_pie(data, pie_id)
+        if pie_data is None:
+            self.report({"ERROR"}, "请先选择一个饼")
             return {"CANCELLED"}
-        wm.piebind_key_json = json.dumps(key)
-        wm.piebind_capture_label = f"手动：{ke.key_label(key)}"
-        if not wm.piebind_slot_text:
-            pass
+        config.delete_pie(data, pie_id)
+        config.save(data)
+        wm.piebind_pie = ""
+        ke.apply(config.load())
+        self.report({"INFO"}, f"已删除饼：{pie_data.get('label', pie_id)}")
         return {"FINISHED"}
+
+
+class PIEBIND_MT_pies(bpy.types.Menu):
+    bl_label = "选择饼"
+    bl_idname = "PIEBIND_MT_pies"
+
+    def draw(self, context):
+        layout = self.layout
+        wm = context.window_manager
+        data = config.load()
+        pies = data.get("pies", [])
+        if not pies:
+            layout.label(text="还没有饼")
+            return
+        for item in pies:
+            op = layout.operator(
+                "piebind.select_pie",
+                text=item.get("label") or item["id"],
+                icon="CHECKMARK" if item["id"] == wm.piebind_pie else "DOT",
+            )
+            op.pie_id = item["id"]
+        layout.separator()
+        layout.operator("piebind.delete_pie", text="删除当前饼", icon="X")
+
+
+class PIEBIND_MT_operators(bpy.types.Menu):
+    bl_label = "选择操作符"
+    bl_idname = "PIEBIND_MT_operators"
+
+    def draw(self, context):
+        layout = self.layout
+        wm = context.window_manager
+        query = getattr(wm, "piebind_op_query", "")
+        hits = ke.search_operators(query, limit=20)
+        if not hits:
+            layout.label(text=f"没有匹配：{query}" if query else "输入搜索词后打开")
+            return
+        for idn in hits:
+            op = layout.operator(
+                "piebind.pick_operator",
+                text=f"{ke.operator_label_zh(idn)} ({idn})",
+            )
+            op.idname = idn
 
 
 class PIEBIND_OT_call_pie(bpy.types.Operator):
@@ -383,6 +428,7 @@ class PIEBIND_OT_capture_key(bpy.types.Operator):
 
     def invoke(self, context, event):
         wm = context.window_manager
+        self._armed_at = time.time() + 0.05
         wm.piebind_capture_label = "请按下组合键…（Esc 取消）"
         _set_status(context, "PieBind：请按下组合键…")
         context.window_manager.modal_handler_add(self)
@@ -406,6 +452,18 @@ class PIEBIND_OT_capture_key(bpy.types.Operator):
         return {"FINISHED"}
 
     def modal(self, context, event):
+        # 调试开关：记录收到的每一个事件，便于定位“某些键抓不到”
+        log_path = os.environ.get("PIEBIND_DEBUG_CAPTURE")
+        if log_path:
+            try:
+                with open(log_path, "a", encoding="utf-8") as fh:
+                    fh.write(f"{event.type}/{event.value} c={event.ctrl} s={event.shift} "
+                             f"a={event.alt}\n")
+            except Exception:
+                pass
+        # 刚点下按钮的 50ms 内忽略（避免把点击的余波当成按键）
+        if time.time() < getattr(self, "_armed_at", 0):
+            return {"RUNNING_MODAL"}
         if event.value not in ("PRESS", "CLICK", "DOUBLE_CLICK"):
             return {"RUNNING_MODAL"}
         if event.type in CANCEL_EVENTS:
@@ -766,5 +824,7 @@ CLASSES = (
     PIEBIND_OT_dispatch,
     PIEBIND_OT_pick_operator,
     PIEBIND_OT_select_pie,
-    PIEBIND_OT_apply_manual_key,
+    PIEBIND_OT_delete_pie,
+    PIEBIND_MT_pies,
+    PIEBIND_MT_operators,
 )

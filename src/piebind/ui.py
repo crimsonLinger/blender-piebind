@@ -38,21 +38,14 @@ def _worst(occupants):
 
 
 def _draw_operator_picker(layout, wm):
-    """搜索 + 结果按钮 + 手填字段；支持中文（用 Blender 的 UI 翻译）。"""
+    """搜索框 + 下拉菜单选择操作符（中文优先）。"""
     layout.prop(wm, "piebind_op_query", text="搜索")
-    hits = ke.search_operators(wm.piebind_op_query, limit=6)
-    if hits:
-        col = layout.column(align=True)
-        for idn in hits:
-            op = col.operator(
-                "piebind.pick_operator",
-                text=f"{ke.operator_label_zh(idn)} - {idn}",
-            )
-            op.idname = idn
     chosen = getattr(wm, "piebind_op_choice", "")
     if chosen and ke.has_operator(chosen):
-        layout.label(text=f"已选：{ke.operator_label_zh(chosen)}", icon="CHECKMARK")
-    layout.prop(wm, "piebind_op_choice", text="操作符 ID")
+        label = f"操作符：{ke.operator_label_zh(chosen)}"
+    else:
+        label = "操作符：未选择"
+    layout.menu("PIEBIND_MT_operators", text=label, icon="COLLAPSEMENU")
 
 
 def _slot_summary(slot):
@@ -243,22 +236,17 @@ class PIEBIND_AP_Preferences(bpy.types.AddonPreferences):
         row.label(text=wm.piebind_capture_label or "（未捕获）")
         row.operator("piebind.capture_key", text="捕获", icon="REC")
         row = box.row(align=True)
-        row.prop(wm, "piebind_key_manual", text="手动键位")
-        row.operator("piebind.apply_manual_key", text="应用", icon="CHECKMARK")
-        row = box.row(align=True)
         row.prop(wm, "piebind_keymap", text="Keymap")
         row = box.row(align=True)
         row.prop(wm, "piebind_target_kind", expand=True)
         if wm.piebind_target_kind == "pie":
-            box.label(text="目标饼（点一下选中）：")
-            col = box.column(align=True)
-            for item in pies:
-                op = col.operator(
-                    "piebind.select_pie",
-                    text=item.get("label") or item["id"],
-                    depress=(item["id"] == wm.piebind_pie),
-                )
-                op.pie_id = item["id"]
+            current_pie = config.find_pie(data, wm.piebind_pie)
+            row = box.row(align=True)
+            row.menu(
+                "PIEBIND_MT_pies",
+                text=f"目标饼：{current_pie['label']}" if current_pie else "目标饼：未选择",
+                icon="MESH_CIRCLE",
+            )
             if not pies:
                 box.label(text="还没有饼，先在下方新建", icon="INFO")
             elif not wm.piebind_pie:
@@ -295,15 +283,15 @@ class PIEBIND_AP_Preferences(bpy.types.AddonPreferences):
         row.operator("piebind.create_pie", text="新建饼", icon="ADD")
 
         if pies:
-            box.label(text="选择要编辑的饼：")
-            col = box.column(align=True)
-            for item in pies:
-                op = col.operator(
-                    "piebind.select_pie",
-                    text=item.get("label") or item["id"],
-                    depress=(item["id"] == wm.piebind_pie),
-                )
-                op.pie_id = item["id"]
+            current = config.find_pie(data, wm.piebind_pie)
+            row = box.row(align=True)
+            row.menu(
+                "PIEBIND_MT_pies",
+                text=f"编辑：{current['label']}" if current else "编辑：未选择",
+                icon="MESH_CIRCLE",
+            )
+            op = row.operator("piebind.delete_pie", text="", icon="X")
+            op.pie_id = wm.piebind_pie
             row = box.row(align=True)
             op = row.operator("piebind.test_pie", text="预览当前饼", icon="PLAY")
             op.pie_id = wm.piebind_pie
