@@ -1,11 +1,13 @@
 """GUI 覆盖探针：验证强制覆盖在真实内置键位上是否生效。
 
-由 tests/run_gui_probe.ps1 启动；脚本会：
-1. 找到 3D View 里真实的 'T'（工具栏开关）键位；
-2. 用我们的绑定覆盖它（静音原项）；
-3. 写 ready 文件，等待外部 SendKeys 按下 'T'；
-4. 若 use_snap 被我们的 context_toggle 翻转，说明覆盖真正生效；
-5. 复原 → 模拟崩溃 → journal 自愈校验 → 写结果并退出。
+目标键位：3D View 里 Shift+Tab（`wm.context_toggle` → tool_settings.use_snap）。
+我们的绑定：同一组合键，但切换 `scene.tool_settings.use_snap_rotate`。
+
+判据：按下后
+- 覆盖生效 → use_snap_rotate == True 且 use_snap == False
+- 覆盖失效 → use_snap == True（原功能抢走了键）
+
+由 tests/run_gui_probe.ps1 启动；同时写 ready.json 供外部 SendKeys 使用。
 """
 
 import json
@@ -40,6 +42,10 @@ from piebind import config, keymap_engine as ke  # noqa: E402
 RESULTS = []
 STATE = {"started": time.time()}
 
+SENDKEYS_NAMES = {"TAB": "{TAB}", "RET": "{ENTER}", "ESC": "{ESC}", "SPACE": " "}
+DIGITS = {"ONE": "1", "TWO": "2", "THREE": "3", "FOUR": "4", "FIVE": "5",
+          "SIX": "6", "SEVEN": "7", "EIGHT": "8", "NINE": "9", "ZERO": "0"}
+
 
 def record(name, ok, detail=""):
     RESULTS.append({"name": name, "ok": bool(ok), "detail": str(detail)[:400]})
@@ -49,6 +55,28 @@ def record(name, ok, detail=""):
 def save_results():
     with open(RESULT, "w", encoding="utf-8") as fh:
         json.dump(RESULTS, fh, ensure_ascii=False, indent=1)
+
+
+def to_sendkeys(key):
+    mods = ""
+    if key.get("ctrl"):
+        mods += "^"
+    if key.get("shift"):
+        mods += "+"
+    if key.get("alt"):
+        mods += "%"
+    name = key.get("type", "")
+    if name in SENDKEYS_NAMES:
+        token = SENDKEYS_NAMES[name]
+    elif name in DIGITS:
+        token = DIGITS[name]
+    elif name.startswith("F") and name[1:].isdigit():
+        token = "{" + name + "}"
+    elif len(name) == 1:
+        token = name.lower()
+    else:
+        token = "{TAB}"
+    return mods + token
 
 
 def find_target():
@@ -65,12 +93,16 @@ def find_target():
         if kmi.idname != "wm.context_toggle":
             continue
         data_path = getattr(kmi.properties, "data_path", "") or ""
-        if "show_region_toolbar" not in data_path:
+        if data_path != "tool_settings.use_snap":
             continue
-        if kmi.ctrl or kmi.shift or kmi.alt or getattr(kmi, "oskey", False):
+        if kmi.ctrl or kmi.alt:
             continue
         return target_km, kmi
     return target_km, None
+
+
+def quit_later():
+    bpy.ops.wm.quit_blender()
 
 
 def setup():
@@ -79,9 +111,9 @@ def setup():
     wm = bpy.context.window_manager
     target_km, target_kmi = find_target()
     if target_kmi is None:
-        record("找到 T 键位", False, "未在 3D View 找到 show_region_toolbar 的 T")
+        record("找到内置键位", False, "3D View 里没有 use_snap 的 context_toggle")
         save_results()
-        bpy.ops.wm.quit_blender()
+        bpy.app.timers.register(quit_later, first_interval=0.3)
         return
 
     combo = {
@@ -98,10 +130,12 @@ def setup():
         "scene": scene,
         "target": target_kmi,
         "combo": combo,
-        "original_active": target_kmi.active,
-        "original_idname": target_kmi.idname,
     })
-    record("找到内置键位", True, f"{ke.key_label(combo)} → {target_kmi.idname} ({getattr(target_kmi.properties, 'data_path', '')})")
+    record(
+        "找到内置键位", True,
+        f"{ke.key_label(combo)} → {target_kmi.idname} "
+        f"({getattr(target_kmi.properties, 'data_path', '')})",
+    )
 
     data = config.default_data()
     pie = config.create_pie(data, "探针饼")
@@ -117,7 +151,7 @@ def setup():
         "target": {
             "kind": "operator",
             "id": "wm.context_toggle",
-            "props": {"data_path": "scene.tool_settings.use_snap"},
+            "props": {"data_path": "scene.tool_settings.use_snap_rotate"},
         },
     })
     config.save(data)
@@ -126,14 +160,11 @@ def setup():
 
     record("创建我们的键位", len(report["created"]) == 1 and not report["skipped"], report)
     record("内置项被静音", target_kmi.active is False, f"active={target_kmi.active}")
-    record("存在覆盖记录", any(m["owner"] for m in report["muted"]), report["muted"])
+    record("覆盖记录已写入", len(report["muted"]) >= 1, report["muted"])
     record("journal 已落盘", config.read_journal() is not None)
 
-    # 镜像检查：我们的条目是否同时出现在 user/active 层
     mirrors = {}
-    for kc in (wm.keyconfigs.active, wm.keyconfigs.user, wm.keyconfigs.addon):
-        if kc is None:
-            continue
+    for kc in wm.keyconfigs:
         count = 0
         for km in kc.keymaps:
             for kmi in km.keymap_items:
@@ -143,22 +174,61 @@ def setup():
     record("镜像层统计", True, mirrors)
 
     scene.tool_settings.use_snap = False
+    scene.tool_settings.use_snap_rotate = False
+
+    state = []
+    for layer, kc in ke.iter_layers():
+        kmx = ke.find_keymap(kc, {"name": "3D View", "space": "VIEW_3D", "region": "WINDOW"})
+        if kmx is None:
+            continue
+        for kmi in kmx.keymap_items:
+            if not ke.combo_match(kmi, combo):
+                continue
+            state.append({
+                "layer": layer,
+                "idname": kmi.idname,
+                "active": kmi.active,
+                "data_path": getattr(kmi.properties, "data_path", ""),
+            })
+    record("按下前的键位状态", any(s["active"] for s in state), state)
+
+    payload = {
+        "pid": os.getpid(),
+        "key": combo,
+        "label": ke.key_label(combo),
+        "sendkeys": to_sendkeys(combo),
+        "expect": "use_snap_rotate == True and use_snap == False",
+    }
     with open(READY, "w", encoding="utf-8") as fh:
-        json.dump({"pid": os.getpid(), "key": combo, "label": ke.key_label(combo)}, fh)
+        json.dump(payload, fh, ensure_ascii=False)
 
     bpy.app.timers.register(wait_for_key, first_interval=0.2)
+
+
+def _focus_note():
+    try:
+        with open(os.path.join(OUT, "focus.json"), "r", encoding="utf-8") as fh:
+            info = json.load(fh)
+        return f"focus={info.get('focused')}"
+    except Exception:
+        return "focus=unknown"
 
 
 def wait_for_key():
     scene = STATE.get("scene")
     if os.path.exists(STOP):
-        value = bool(scene.tool_settings.use_snap) if scene else None
-        record("实按热键后我们的操作生效", value is True,
-               f"use_snap={value}（False 说明覆盖未生效/按键没进来）")
+        rotate = bool(scene.tool_settings.use_snap_rotate) if scene else None
+        snap = bool(scene.tool_settings.use_snap) if scene else None
+        record(
+            "实按热键后我们的操作生效",
+            rotate is True and snap is False,
+            f"use_snap_rotate={rotate} use_snap={snap} {_focus_note()}"
+            + ("（use_snap=True 说明原功能抢走了键）" if snap else ""),
+        )
         phase_cleanup()
         return None
-    if time.time() - STATE["started"] > 90:
-        record("等待按键", False, "90s 超时，未收到外部按键信号")
+    if time.time() - STATE["started"] > 120:
+        record("等待按键", False, "120s 超时，未收到外部按键信号")
         phase_cleanup()
         return None
     return 0.2
@@ -173,7 +243,6 @@ def phase_cleanup():
     except Exception:
         record("复原流程", False, traceback.format_exc()[:300])
 
-    # 模拟崩溃：覆盖后直接删掉我们的条目，留下 journal
     try:
         data = config.load()
         ke.apply(data)
@@ -202,7 +271,7 @@ def phase_cleanup():
         piebind.unregister()
     except Exception:
         pass
-    bpy.ops.wm.quit_blender()
+    bpy.app.timers.register(quit_later, first_interval=0.2)
 
 
 def main():
@@ -211,7 +280,7 @@ def main():
     except Exception:
         record("探针启动", False, traceback.format_exc()[:600])
         save_results()
-        bpy.ops.wm.quit_blender()
+        bpy.app.timers.register(quit_later, first_interval=0.3)
 
 
 main()

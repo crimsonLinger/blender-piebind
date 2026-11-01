@@ -2,6 +2,40 @@
 
 倒序记录。每轮迭代追加：`## 日期 · 第N轮：一句话主题`，末尾写「当前状态 / 下一步 / 未验证」。
 
+## 2026-11-02 · 第5轮：运行时绑定改挂 Window 层 + 分发器；修掉三个真 bug；49 项测试全绿
+
+### 关键发现（实测）
+- **写进 `keyconfigs.addon` 的运行时条目在当前进程不会被分发**（`keyconfigs.update()` 也不会合并进 active/user 的 keymap_items）。
+- **写进 `active` 层的 Window keymap 会被立即分发**（用自定义 `probe.mark` 操作符验证：按下即调用）。
+- **写进 `active` 层的区域 keymap（3D View）不会被分发**（覆盖后原功能静音、我们的条目活跃，按键毫无反应）。
+
+### 设计变更
+- 所有动态绑定统一挂到 **active keyconfig 的 Window 键位层**，指向分发器 `piebind.dispatch(binding_id)`；
+  分发器读取配置、按 `keymap.space` 做区域判断（`context.area` 为 None 时不否决，交由目标 poll），
+  再执行目标：饼菜单走 `wm.call_menu_pie`，操作符走 `bpy.ops(...)`。
+- 冲突扫描/静音同时覆盖“目标区域 keymap”和 Window keymap；`owned.json` 签名含**操作符属性快照**，避免误删同操作符不同参数的条目。
+
+### 修掉的真 bug
+1. `ops.py` 缺 `import os` → 分发器一被调用就抛 `NameError`，表现为“按键毫无反应”；
+2. 区域判断过严（`context.area is None` 直接 CANCELLED）→ 窗口级分发普遍被否决；
+3. `_new_item` 全量显式传参（`any/oskey/key_modifier/repeat`）与手工验证过的写法不一致 → 改为只传非默认值。
+
+### 验证
+- headless 测试 **49/49** 通过（条目落在 active/Window、携带 binding_id、重放不重复、静音/复原、owned 签名、诊断）。
+- GUI 直调验证（`tests/gui_probe_direct.py`）：分发器执行目标（`use_snap_rotate=True`）、打开饼菜单（`{'INTERFACE'}`）、复原清理均通过。
+- **未完成**：真实按键 → 分发器的端到端确认（多次人工按键未命中，期间发现的 bug 已修复）。
+
+### 当前状态
+- v0.1 功能齐备并通过逻辑层测试；GUI 按键链路仅差最后一步确认。
+- 副作用：绑定落在 active 层，卸载/崩溃依赖 `unapply` + `owned.json` 清理（已有测试覆盖）。
+
+### 下一步
+1. 环境合适时跑 `tests/gui_probe_engine.py`（按 F8）确认端到端。
+2. 推送 GitHub、跑 CI。
+
+### 未验证
+- 真实按键端到端；Blender 4.2 兼容；GitHub Actions 实跑。
+
 ## 2026-11-01 · 第4轮：工程化（README/许可证/CI/诊断）+ 40 项测试全绿 + 仓库初始化
 
 ### 结论

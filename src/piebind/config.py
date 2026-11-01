@@ -166,6 +166,36 @@ def clear_journal():
         pass
 
 
+# ---------------------------------------------------------------- owned items
+# 我们创建的键位条目签名。绑定到原生操作符时 idname 不带 piebind. 前缀，
+# 只能靠签名在重启/崩溃后认出「这条是我们加的」，避免重复与残留。
+def read_owned():
+    path = path_of("owned.json")
+    if not os.path.exists(path):
+        return []
+    try:
+        with open(path, "r", encoding="utf-8") as fh:
+            payload = json.load(fh)
+        items = payload.get("items")
+        return items if isinstance(items, list) else []
+    except Exception:
+        return []
+
+
+def write_owned(items):
+    if not items:
+        clear_owned()
+        return
+    _atomic_write(path_of("owned.json"), {"version": 1, "items": list(items)})
+
+
+def clear_owned():
+    try:
+        os.remove(path_of("owned.json"))
+    except FileNotFoundError:
+        pass
+
+
 # ---------------------------------------------------------------- mutations
 def create_pie(data, label="新建饼"):
     pie = empty_pie(label)

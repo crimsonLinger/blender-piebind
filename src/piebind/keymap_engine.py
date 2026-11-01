@@ -15,6 +15,11 @@ from . import config
 OWN_PREFIX = "piebind."
 PIE_MENU_ID = "PIEBIND_MT_pie"
 CALL_PIE_IDNAME = "piebind.call_pie"
+DISPATCH_IDNAME = "piebind.dispatch"
+
+# 动态绑定统一挂在 Window 键位层：区域 keymap（3D View 等）在运行时新增的条目
+# 不会被分发（实测），而 Window 层会，所以用一个带区域判断的分发器落地。
+WINDOW_SPEC = {"name": "Window", "space": "EMPTY", "region": "WINDOW"}
 
 MOD_KEYS = ("ctrl", "shift", "alt", "oskey")
 KEY_TEMPLATE = {
@@ -127,6 +132,12 @@ def find_keymap(kc, spec):
             continue
         return km
     return None
+
+
+def target_keyconfig():
+    """运行时绑定必须写进 active —— 写 addon 层的条目在当前进程不会参与分发。"""
+    wm = bpy.context.window_manager
+    return wm.keyconfigs.active or wm.keyconfigs.addon
 
 
 def ensure_keymap(kc, spec):
@@ -333,7 +344,7 @@ def scan_conflict(spec, key):
         if km is None:
             continue
         bucket = [kmi for kmi in km.keymap_items if combo_match(kmi, key)]
-        active_others = [kmi for kmi in bucket if kmi.active and not is_own(kmi)]
+        active_others = [kmi for kmi in bucket if kmi.active and not is_ours_item(km, kmi)]
         for kmi in active_others:
             dedupe = (kmi.idname, item_props_name(kmi))
             if dedupe in seen:
@@ -396,24 +407,34 @@ def _set_props(kmi, props):
 
 
 def _new_item(km, idname, key):
+    """与手工验证过的写法保持一致：只显式传非默认值。
+
+    实测（Blender 5.2）用最小 kwargs 写进 active/Window 的条目能被正常分发；
+    全量显式传参的版本行为未确认，因此这里保守处理。
+    """
     k = normalize_key(key)
-    kwargs = dict(
-        type=k["type"],
-        value=k["value"] if k["value"] != "ANY" else "PRESS",
-        any=k["any"],
-        shift=k["shift"],
-        ctrl=k["ctrl"],
-        alt=k["alt"],
-        oskey=k["oskey"],
-        key_modifier=k["key_modifier"],
-        repeat=k["repeat"],
-    )
+    value = k["value"] if k["value"] != "ANY" else "PRESS"
+    kwargs = {}
+    if k["any"]:
+        kwargs["any"] = True
+    if k["shift"]:
+        kwargs["shift"] = True
+    if k["ctrl"]:
+        kwargs["ctrl"] = True
+    if k["alt"]:
+        kwargs["alt"] = True
+    if k["oskey"]:
+        kwargs["oskey"] = True
+    if k["key_modifier"] not in ("NONE", ""):
+        kwargs["key_modifier"] = k["key_modifier"]
+    if k["repeat"]:
+        kwargs["repeat"] = True
     try:
-        return km.keymap_items.new(idname, **kwargs)
+        return km.keymap_items.new(idname, k["type"], value, **kwargs)
     except TypeError:
-        kwargs.pop("repeat", None)
-        kwargs.pop("key_modifier", None)
-        return km.keymap_items.new(idname, **kwargs)
+        for extra in ("key_modifier", "repeat", "oskey"):
+            kwargs.pop(extra, None)
+        return km.keymap_items.new(idname, k["type"], value, **kwargs)
 
 
 def _journal_entries(muted):
@@ -463,14 +484,93 @@ def restore_entries(entries):
     return restored
 
 
-def _mute(records, spec, key, dry_run):
-    """把冲突项静音；返回记录。dry_run 时只收集不修改。"""
+# 我们创建的条目签名（目标可能是原生操作符，idname 不带 piebind. 前缀）
+_OWNED = []
+
+
+def refresh_owned():
+    global _OWNED
+    _OWNED = config.read_owned()
+
+
+def _props_snapshot(kmi):
+    """记录条目的操作符属性，用于区分「同一操作符但参数不同」的键位。"""
+    out = {}
+    try:
+        rna = kmi.properties.bl_rna
+    except Exception:
+        return out
+    for prop in rna.properties:
+        if prop.identifier in ("rna_type",):
+            continue
+        try:
+            value = getattr(kmi.properties, prop.identifier)
+        except Exception:
+            continue
+        if isinstance(value, (bool, int, float, str)):
+            out[prop.identifier] = value
+    return out
+
+
+def _signature(km, kmi):
+    return {
+        "keymap": km.name,
+        "region": km.region_type,
+        "type": kmi.type,
+        "value": kmi.value,
+        "ctrl": bool(kmi.ctrl),
+        "shift": bool(kmi.shift),
+        "alt": bool(kmi.alt),
+        "oskey": bool(getattr(kmi, "oskey", False)),
+        "any": bool(getattr(kmi, "any", False)),
+        "key_modifier": getattr(kmi, "key_modifier", "NONE") or "NONE",
+        "idname": kmi.idname,
+        "props": _props_snapshot(kmi),
+    }
+
+
+def signature_matches(sig, km, kmi):
+    if sig.get("keymap") != km.name:
+        return False
+    if sig.get("idname") != kmi.idname:
+        return False
+    if sig.get("type") != kmi.type or sig.get("value") != kmi.value:
+        return False
+    for name in ("ctrl", "shift", "alt", "oskey", "any"):
+        if bool(sig.get(name)) != bool(getattr(kmi, name, False)):
+            return False
+    if (sig.get("key_modifier") or "NONE") != (getattr(kmi, "key_modifier", "NONE") or "NONE"):
+        return False
+    expected = sig.get("props") or {}
+    current = _props_snapshot(kmi)
+    if expected and current != expected:
+        return False
+    return True
+
+
+def is_ours_item(km, kmi):
+    if is_own(kmi):
+        return True
+    for sig in _OWNED:
+        if signature_matches(sig, km, kmi):
+            return True
+    return False
+
+
+def _mute(records, spec, key, dry_run, skip_ids=None):
+    """把冲突项静音；返回记录。dry_run 时只收集不修改。
+
+    skip_ids: {(keymap_name, item_id)} —— 我们自己刚创建的条目，绝不能静音自己。
+    """
+    skip_ids = skip_ids or set()
     for layer, kc in iter_layers():
         km = find_keymap(kc, spec)
         if km is None:
             continue
         for kmi in list(km.keymap_items):
             if is_own(kmi) or not kmi.active:
+                continue
+            if (km.name, kmi.id) in skip_ids:
                 continue
             if not combo_match(kmi, key):
                 continue
@@ -502,13 +602,15 @@ def apply(data, dry_run=False):
     report = {"created": [], "muted": [], "skipped": [], "dry_run": bool(dry_run),
               "duplicates": duplicate_bindings(data)}
     wm = bpy.context.window_manager
-    kc = wm.keyconfigs.addon
+    kc = target_keyconfig()
     if kc is None:
-        report["skipped"].append({"reason": "addon keyconfig unavailable"})
+        report["skipped"].append({"reason": "no keyconfig available"})
         return report
 
     created = []
     muted = []
+    created_ids = set()
+    owned_sigs = []
 
     for binding in data.get("bindings", []):
         if not binding.get("enabled", True):
@@ -522,12 +624,10 @@ def apply(data, dry_run=False):
             if pie is None:
                 report["skipped"].append({"binding": binding.get("id"), "reason": "pie missing"})
                 continue
-            idname = CALL_PIE_IDNAME
-            props = {"pie_id": pie["id"]}
         else:
-            idname = target.get("id") or ""
-            if not has_operator(idname):
-                report["skipped"].append({"binding": binding.get("id"), "reason": f"operator missing: {idname}"})
+            target_id = target.get("id") or ""
+            if not has_operator(target_id):
+                report["skipped"].append({"binding": binding.get("id"), "reason": f"operator missing: {target_id}"})
                 continue
 
         spec = binding.get("keymap") or {}
@@ -536,25 +636,31 @@ def apply(data, dry_run=False):
             continue
         key = normalize_key(binding.get("key") or {})
 
-        km = find_keymap(kc, spec) if dry_run else ensure_keymap(kc, spec)
+        km = find_keymap(kc, WINDOW_SPEC) if dry_run else ensure_keymap(kc, WINDOW_SPEC)
+        if km is None:
+            report["skipped"].append({"binding": binding.get("id"), "reason": "window keymap unavailable"})
+            continue
         entry = {
             "binding": binding.get("id"),
-            "idname": idname,
+            "idname": DISPATCH_IDNAME,
             "key": key_label(key),
             "keymap": f'{spec.get("name")} [{spec.get("space", "")}]',
         }
         if not dry_run:
             try:
-                kmi = _new_item(km, idname, key)
+                kmi = _new_item(km, DISPATCH_IDNAME, key)
             except Exception as exc:
                 report["skipped"].append({"binding": binding.get("id"), "reason": f"new item failed: {exc}"})
                 continue
-            _set_props(kmi, props)
-            created.append({"kc": kc.name, "keymap": dict(spec), "key": key, "idname": idname})
+            _set_props(kmi, {"binding_id": binding.get("id")})
+            created.append({"kc": kc.name, "keymap": dict(WINDOW_SPEC), "key": key, "idname": DISPATCH_IDNAME})
+            created_ids.add((km.name, kmi.id))
+            owned_sigs.append(_signature(km, kmi))
         report["created"].append(entry)
 
         if binding.get("force_override"):
-            _mute(muted, spec, key, dry_run)
+            _mute(muted, spec, key, dry_run, created_ids)
+            _mute(muted, WINDOW_SPEC, key, dry_run, created_ids)
 
     report["muted"] = [
         {"owner": m.get("owner"), "idname": m["idname"], "kc": m["kc"], "key": key_label(m["key"])}
@@ -568,6 +674,8 @@ def apply(data, dry_run=False):
     APPLIED["items"] = created
     APPLIED["muted"] = muted
     APPLIED["applied_at"] = time.time()
+    config.write_owned(owned_sigs)
+    refresh_owned()
     if muted:
         config.write_journal({"version": 1, "entries": _journal_entries(muted)})
     else:
@@ -576,34 +684,37 @@ def apply(data, dry_run=False):
 
 
 def purge():
-    """清理我们自己的键位条目（幂等注册的关键）。"""
-    wm = bpy.context.window_manager
+    """清理我们自己的键位条目（幂等注册的关键）。
+
+    条目可能落在 active / user / addon 任意一层（目标为原生操作符时 idname
+    不带前缀），统一按 owned.json 的签名识别并移除。
+    """
     removed = 0
-    kc = wm.keyconfigs.addon
-    if kc is not None:
+    refresh_owned()
+    for _layer, kc in list(iter_layers()):
         for km in list(kc.keymaps):
             for kmi in list(km.keymap_items):
-                if is_own(kmi):
-                    try:
-                        km.keymap_items.remove(kmi)
-                        removed += 1
-                    except Exception:
-                        pass
+                if not is_ours_item(km, kmi):
+                    continue
+                try:
+                    km.keymap_items.remove(kmi)
+                    removed += 1
+                except Exception:
+                    pass
     APPLIED["items"] = []
+    config.clear_owned()
+    refresh_owned()
     return removed
 
 
 def unapply():
     """移除我们的键位并恢复被静音的条目。"""
-    wm = bpy.context.window_manager
     removed = 0
-    restored = 0
-
-    kc = wm.keyconfigs.addon
-    if kc is not None:
+    refresh_owned()
+    for _layer, kc in list(iter_layers()):
         for km in list(kc.keymaps):
             for kmi in list(km.keymap_items):
-                if not is_own(kmi):
+                if not is_ours_item(km, kmi):
                     continue
                 try:
                     km.keymap_items.remove(kmi)
@@ -621,6 +732,8 @@ def unapply():
 
     APPLIED["items"] = []
     APPLIED["muted"] = []
+    config.clear_owned()
+    refresh_owned()
     config.clear_journal()
     return {"removed": removed, "restored": restored}
 

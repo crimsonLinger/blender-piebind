@@ -40,6 +40,20 @@ def section(title):
     print(f"\n== {title} ==")
 
 
+def items_in(kc, spec, key=None, idname=None):
+    km = ke.find_keymap(kc, spec)
+    if km is None:
+        return []
+    out = []
+    for item in km.keymap_items:
+        if key is not None and not ke.combo_match(item, key):
+            continue
+        if idname is not None and item.idname != idname:
+            continue
+        out.append(item)
+    return out
+
+
 def main():
     piebind.register()
 
@@ -75,31 +89,29 @@ def main():
     report = ke.apply(data)
     check("创建了 1 条绑定", len(report["created"]) == 1, report)
     addon_kc = bpy.context.window_manager.keyconfigs.addon
-    ours = [
-        kmi for km in addon_kc.keymaps
-        for kmi in km.keymap_items if kmi.idname == ke.CALL_PIE_IDNAME
-    ]
-    check("插件层出现我们的条目", len(ours) == 1, len(ours))
-    check("条目携带 pie_id", getattr(ours[0].properties, "pie_id", "") == pie["id"])
+    target_kc = ke.target_keyconfig()
+    spec0 = {"name": "Window", "space": "EMPTY", "region": "WINDOW"}
+    check("活动层 keyconfig 可用", target_kc is not None, target_kc)
+    ours = items_in(target_kc, spec0, idname=ke.DISPATCH_IDNAME)
+    check("活动层出现我们的条目", len(ours) == 1, len(ours))
+    check("条目携带 binding_id", getattr(ours[0].properties, "binding_id", "") == "bd_test_1")
     check("无冲突时 journal 清空", config.read_journal() is None)
 
     result = ke.unapply()
     check("卸载后条目清零", result["removed"] >= 1, result)
-    leftovers = [
-        kmi for km in addon_kc.keymaps
-        for kmi in km.keymap_items if (kmi.idname or "").startswith("piebind.")
-    ]
+    leftovers = []
+    for layer_kc in (target_kc, addon_kc):
+        leftovers += [
+            k for k in items_in(layer_kc, spec0)
+            if (k.idname or "").startswith("piebind.")
+        ]
     check("卸载后无残留", leftovers == [], len(leftovers))
 
     section("dry-run 不落库")
     data = config.load()
-    before = len([
-        kmi for km in addon_kc.keymaps for kmi in km.keymap_items
-    ])
+    before = len(items_in(target_kc, spec0))
     dry = ke.apply(data, dry_run=True)
-    after = len([
-        kmi for km in addon_kc.keymaps for kmi in km.keymap_items
-    ])
+    after = len(items_in(target_kc, spec0))
     check("dry-run 报告创建数", len(dry["created"]) == 1, dry)
     check("dry-run 未真实创建", before == after, (before, after))
 
@@ -122,7 +134,8 @@ def main():
     check("干扰条目被静音", rival.active is False, rival.active)
     check("journal 已写入", config.read_journal() is not None)
 
-    ours = [k for k in km.keymap_items if k.idname == ke.CALL_PIE_IDNAME]
+    win_spec = {"name": "Window", "space": "EMPTY", "region": "WINDOW"}
+    ours = items_in(target_kc, win_spec, idname=ke.DISPATCH_IDNAME)
     check("我们的条目处于激活", len(ours) == 1 and ours[0].active, len(ours))
 
     ke.unapply()
@@ -148,21 +161,63 @@ def main():
     check("缺失操作符被跳过", any(s.get("binding") == "bd_missing" for s in report["skipped"]), report["skipped"])
     ke.unapply()
 
+    section("原生操作符目标：不静音自己、可幂等重放")
+    spec = {"name": "3D View", "space": "VIEW_3D", "region": "WINDOW"}
+    km = ke.ensure_keymap(addon_kc, spec)
+    native_key = {"type": "F6", "value": "PRESS", "ctrl": True, "shift": True, "alt": True}
+    rival = km.keymap_items.new("wm.context_toggle", "F6", "PRESS", ctrl=True, shift=True, alt=True)
+    rival.properties.data_path = "scene.tool_settings.use_snap"
+
+    data = config.load()
+    data["bindings"] = [{
+        "id": "bd_native",
+        "enabled": True,
+        "force_override": True,
+        "keymap": spec,
+        "key": native_key,
+        "target": {"kind": "operator", "id": "wm.context_toggle",
+                   "props": {"data_path": "scene.tool_settings.use_snap_rotate"}},
+    }]
+    config.save(data)
+    report = ke.apply(data)
+    matches = items_in(addon_kc, spec, key=native_key) + items_in(target_kc, win_spec, key=native_key)
+    check("目标同 combo 共 2 条", len(matches) == 2, len(matches))
+    check("我们自己那条保持激活", any(k.active for k in matches), [k.active for k in matches])
+    check("干扰项被静音", rival.active is False, rival.active)
+    check("owned.json 已写入", len(config.read_owned()) == 1, config.read_owned())
+
+    ke.apply(config.load())  # 重放
+    matches = items_in(addon_kc, spec, key=native_key) + items_in(target_kc, win_spec, key=native_key)
+    check("重放不产生重复条目", len(matches) == 2, len(matches))
+    check("重放后仍只有 1 条激活", sum(1 for k in matches if k.active) == 1,
+          [k.active for k in matches])
+
+    ke.unapply()
+    check("卸载后 owned.json 清空", config.read_owned() == [])
+    check("卸载后干扰项恢复", rival.active is True, rival.active)
+    try:
+        km.keymap_items.remove(rival)
+    except Exception:
+        pass
+
     section("面板属性与重复键检测")
     check("WM 捕获属性已注册", hasattr(bpy.types.WindowManager, "piebind_capture_label"))
     check("WM 图标属性已注册", hasattr(bpy.types.WindowManager, "piebind_slot_icon"))
     check("WM 方位属性已注册", hasattr(bpy.types.WindowManager, "piebind_slot_pos"))
 
+    dup_key = {"type": "F10", "value": "PRESS", "ctrl": True, "shift": True, "alt": True}
     data = config.load()
     data["bindings"] = [
-        b for b in data["bindings"] if b.get("id") == "bd_test_1"
+        {"id": "bd_dup_a", "enabled": True, "force_override": False,
+         "keymap": {"name": "3D View", "space": "VIEW_3D", "region": "WINDOW"},
+         "key": dup_key, "target": {"kind": "operator", "id": "wm.context_toggle", "props": {}}},
+        {"id": "bd_dup_b", "enabled": True, "force_override": False,
+         "keymap": {"name": "3D View", "space": "VIEW_3D", "region": "WINDOW"},
+         "key": dup_key, "target": {"kind": "operator", "id": "wm.context_toggle", "props": {}}},
     ]
-    dup_source = dict(data["bindings"][0])
-    dup_source["id"] = "bd_dup"
-    data["bindings"].append(dup_source)
     config.save(data)
     dups = ke.duplicate_bindings(data)
-    check("重复键被识别", len(dups) == 1 and dups[0]["key"] == ke.key_label(data["bindings"][0]["key"]), dups)
+    check("重复键被识别", len(dups) == 1 and dups[0]["key"] == ke.key_label(dup_key), dups)
     report = ke.apply(data, dry_run=True)
     check("apply 报告含重复信息", len(report.get("duplicates", [])) == 1, report.get("duplicates"))
 

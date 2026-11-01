@@ -2,10 +2,18 @@
 # All text kept ASCII to avoid Windows PowerShell encoding issues.
 # Usage: pwsh -NoProfile -File tests\run_gui_probe.ps1
 
+param(
+    [string]$Script = ''
+)
+
 $ErrorActionPreference = 'Stop'
 
 $root   = Split-Path -Parent $PSScriptRoot
-$script = Join-Path $root 'tests\gui_probe.py'
+if ([string]::IsNullOrWhiteSpace($Script)) {
+    $script = Join-Path $root 'tests\gui_probe.py'
+} else {
+    $script = (Resolve-Path $Script).Path
+}
 $outDir = Join-Path $env:TEMP 'piebind_gui_probe'
 $ready  = Join-Path $outDir 'ready.json'
 $stop   = Join-Path $outDir 'stop.txt'
@@ -26,6 +34,9 @@ public class WinProbe {
     [DllImport("user32.dll")] public static extern IntPtr GetForegroundWindow();
     [DllImport("user32.dll")] public static extern bool ShowWindow(IntPtr h, int c);
     [DllImport("user32.dll")] public static extern bool GetWindowRect(IntPtr h, out RECT r);
+    [DllImport("user32.dll")] public static extern int GetWindowThreadProcessId(IntPtr h, out int pid);
+    [DllImport("user32.dll")] public static extern bool SetCursorPos(int x, int y);
+    [DllImport("user32.dll")] public static extern void mouse_event(uint flags, uint dx, uint dy, uint data, UIntPtr extra);
     [StructLayout(LayoutKind.Sequential)] public struct RECT { public int Left; public int Top; public int Right; public int Bottom; }
 }
 "@
@@ -49,29 +60,55 @@ if (Test-Path $ready) {
     Start-Sleep -Milliseconds 600
     $proc.Refresh()
     $hwnd = $proc.MainWindowHandle
+    if ($hwnd -eq 0) {
+        Start-Sleep -Milliseconds 1500
+        $proc.Refresh()
+        $hwnd = $proc.MainWindowHandle
+    }
     [void][WinProbe]::ShowWindow($hwnd, 9)
-    [void][WinProbe]::SetForegroundWindow($hwnd)
-    Start-Sleep -Milliseconds 900
 
     $rect = New-Object 'WinProbe+RECT'
     [void][WinProbe]::GetWindowRect($hwnd, [ref]$rect)
     $cx = [int](($rect.Left + $rect.Right) / 2)
     $cy = [int]($rect.Top + ($rect.Bottom - $rect.Top) * 0.45)
     if ($cx -gt 0 -and $cy -gt 0) {
-        [System.Windows.Forms.Cursor]::Position = New-Object System.Drawing.Point($cx, $cy)
+        [void][WinProbe]::SetCursorPos($cx, $cy)
     }
-    Start-Sleep -Milliseconds 300
 
-    $fg = [WinProbe]::GetForegroundWindow()
+    $focused = $false
+    for ($i = 0; $i -lt 6; $i++) {
+        [void][WinProbe]::SetForegroundWindow($hwnd)
+        Start-Sleep -Milliseconds 350
+        $fg = [WinProbe]::GetForegroundWindow()
+        $fgPid = 0
+        [void][WinProbe]::GetWindowThreadProcessId($fg, [ref]$fgPid)
+        Write-Host ("[probe] focus try {0}: fg={1} fgPid={2} blenderPid={3}" -f $i, $fg, $fgPid, $proc.Id)
+        if ($fg -eq $hwnd -or $fgPid -eq $proc.Id) { $focused = $true; break }
+        if ($cx -gt 0 -and $cy -gt 0) {
+            [WinProbe]::mouse_event(0x0002, 0, 0, 0, [UIntPtr]::Zero)
+            [WinProbe]::mouse_event(0x0004, 0, 0, 0, [UIntPtr]::Zero)
+        }
+    }
     $title = (Get-Process -Id $proc.Id).MainWindowTitle
-    Write-Host ("[probe] foreground={0} blender={1} title={2}" -f $fg, $hwnd, $title)
+    Write-Host ("[probe] focused={0} hwnd={1} title={2}" -f $focused, $hwnd, $title)
+    @{ focused = $focused; hwnd = $hwnd.ToString(); fgPid = $fgPid; title = $title } |
+        ConvertTo-Json | Set-Content -Path (Join-Path $outDir 'focus.json') -Encoding UTF8
 
-    if ($fg -eq $hwnd) {
+    if ($focused) {
         Start-Sleep -Milliseconds 200
+        if ($cx -gt 0 -and $cy -gt 0) {
+            [void][WinProbe]::SetCursorPos($cx, $cy)
+            Start-Sleep -Milliseconds 150
+            [WinProbe]::mouse_event(0x0002, 0, 0, 0, [UIntPtr]::Zero)
+            [WinProbe]::mouse_event(0x0004, 0, 0, 0, [UIntPtr]::Zero)
+            Start-Sleep -Milliseconds 250
+        }
         [System.Windows.Forms.SendKeys]::SendWait('{ESC}')
         Start-Sleep -Milliseconds 600
-        [System.Windows.Forms.SendKeys]::SendWait('t')
-        Write-Host '[probe] key sent: t'
+        $send = $info.sendkeys
+        if (-not $send) { $send = '{TAB}' }
+        [System.Windows.Forms.SendKeys]::SendWait($send)
+        Write-Host ("[probe] key sent: {0}" -f $send)
     } else {
         Write-Host '[probe] focus is not blender, skip sending keys (avoid typing elsewhere)'
     }

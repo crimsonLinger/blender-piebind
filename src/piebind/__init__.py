@@ -50,6 +50,10 @@ def _on_load_post(*_args):
 
 def register():
     global _timer_registered
+    try:
+        ke.refresh_owned()
+    except Exception:
+        traceback.print_exc()
     for cls in CLASSES:
         try:
             bpy.utils.register_class(cls)
