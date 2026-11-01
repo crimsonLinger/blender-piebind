@@ -193,51 +193,6 @@ class PIEBIND_AP_Preferences(bpy.types.AddonPreferences):
         if wm.piebind_status:
             box.label(text=wm.piebind_status, icon="INFO")
 
-        # ---------- 饼菜单 ----------
-        box = layout.box()
-        box.label(text=f"饼菜单（{len(pies)}）", icon="MESH_CIRCLE")
-        row = box.row(align=True)
-        row.prop(wm, "piebind_new_pie_label", text="名称")
-        row.operator("piebind.create_pie", text="新建饼", icon="ADD")
-
-        if not pies:
-            box.label(text="还没有饼：输入名称 → 点「新建饼」，这里就会出现方位和功能编辑", icon="INFO")
-        else:
-            current = config.find_pie(data, wm.piebind_pie)
-            row = box.row(align=True)
-            row.menu(
-                "PIEBIND_MT_pies",
-                text=f"编辑：{current['label']}" if current else "编辑：请选择饼",
-                icon="MESH_CIRCLE",
-            )
-            op = row.operator("piebind.delete_pie", text="", icon="X")
-            op.pie_id = wm.piebind_pie
-            if not current:
-                box.label(text="点上面的下拉选择要编辑的饼（新建后会自动选中）", icon="INFO")
-            else:
-                _draw_compass(box, wm, current)
-
-                row = box.row(align=True)
-                op = row.operator("piebind.test_pie", text="预览当前饼", icon="PLAY")
-                op.pie_id = current["id"]
-
-                editor = box.box()
-                editor.label(text=f"编辑槽位 · {pie.SLOT_LABELS[wm.piebind_slot_pos]}", icon="TOOL_SETTINGS")
-                editor.prop(wm, "piebind_slot_pos", text="方位")
-                editor.prop(wm, "piebind_slot_mode", text="模式")
-                if getattr(wm, "piebind_slot_mode", "AUTO") != "AUTO":
-                    editor.label(text="已选模式：将写入 object.mode_set（忽略下面的操作符）", icon="INFO")
-                _draw_operator_picker(editor, wm)
-                editor.prop(wm, "piebind_slot_props", text="属性 JSON")
-                row = editor.row(align=True)
-                row.prop(wm, "piebind_slot_text", text="文字")
-                row.prop(wm, "piebind_slot_icon", text="图标")
-                row2 = editor.row(align=True)
-                row2.operator("piebind.add_slot", text="写入槽位", icon="ADD")
-                op = row2.operator("piebind.remove_slot", text="清空", icon="X")
-                op.pie_id = current["id"]
-                op.pos = wm.piebind_slot_pos
-
         # ---------- 绑定列表 ----------
         box = layout.box()
         box.label(text=f"绑定（{len(bindings)}）", icon="HAND")
@@ -327,6 +282,51 @@ class PIEBIND_AP_Preferences(bpy.types.AddonPreferences):
                 else:
                     box.label(text="该键位当前无冲突", icon="CHECKMARK")
         box.operator("piebind.create_binding", text="保存绑定", icon="ADD")
+
+        # ---------- 饼菜单 ----------
+        box = layout.box()
+        box.label(text=f"饼菜单（{len(pies)}）", icon="MESH_CIRCLE")
+        row = box.row(align=True)
+        row.prop(wm, "piebind_new_pie_label", text="名称")
+        row.operator("piebind.create_pie", text="新建饼", icon="ADD")
+
+        if not pies:
+            box.label(text="还没有饼：输入名称 → 点「新建饼」，这里就会出现方位和功能编辑", icon="INFO")
+        else:
+            current = config.find_pie(data, wm.piebind_pie)
+            row = box.row(align=True)
+            row.menu(
+                "PIEBIND_MT_pies",
+                text=f"编辑：{current['label']}" if current else "编辑：请选择饼",
+                icon="MESH_CIRCLE",
+            )
+            op = row.operator("piebind.delete_pie", text="", icon="X")
+            op.pie_id = wm.piebind_pie
+            if not current:
+                box.label(text="点上面的下拉选择要编辑的饼（新建后会自动选中）", icon="INFO")
+            else:
+                _draw_compass(box, wm, current)
+
+                row = box.row(align=True)
+                op = row.operator("piebind.test_pie", text="预览当前饼", icon="PLAY")
+                op.pie_id = current["id"]
+
+                editor = box.box()
+                editor.label(text=f"编辑槽位 · {pie.SLOT_LABELS[wm.piebind_slot_pos]}", icon="TOOL_SETTINGS")
+                editor.prop(wm, "piebind_slot_pos", text="方位")
+                editor.prop(wm, "piebind_slot_mode", text="模式")
+                if getattr(wm, "piebind_slot_mode", "AUTO") != "AUTO":
+                    editor.label(text="已选模式：将写入 object.mode_set（忽略下面的操作符）", icon="INFO")
+                _draw_operator_picker(editor, wm)
+                editor.prop(wm, "piebind_slot_props", text="属性 JSON")
+                row = editor.row(align=True)
+                row.prop(wm, "piebind_slot_text", text="文字")
+                row.prop(wm, "piebind_slot_icon", text="图标")
+                row2 = editor.row(align=True)
+                row2.operator("piebind.add_slot", text="写入槽位", icon="ADD")
+                op = row2.operator("piebind.remove_slot", text="清空", icon="X")
+                op.pie_id = current["id"]
+                op.pos = wm.piebind_slot_pos
 
         # ---------- 体检 ----------
         _draw_health(layout, data)
