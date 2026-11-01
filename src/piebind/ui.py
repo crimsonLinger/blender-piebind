@@ -247,7 +247,19 @@ class PIEBIND_AP_Preferences(bpy.types.AddonPreferences):
         row = box.row(align=True)
         row.prop(wm, "piebind_target_kind", expand=True)
         if wm.piebind_target_kind == "pie":
-            box.prop(wm, "piebind_pie", text="目标饼")
+            row = box.row(align=True)
+            row.label(text="目标饼：")
+            for item in pies[:5]:
+                op = row.operator(
+                    "piebind.select_pie",
+                    text=item.get("label") or item["id"],
+                    depress=(item["id"] == wm.piebind_pie),
+                )
+                op.pie_id = item["id"]
+            if not pies:
+                box.label(text="还没有饼，先在下方新建", icon="INFO")
+            elif not wm.piebind_pie:
+                box.label(text="请点上面的饼名选中它", icon="INFO")
         else:
             _draw_operator_picker(box, wm)
         box.prop(wm, "piebind_force_override")
@@ -281,8 +293,16 @@ class PIEBIND_AP_Preferences(bpy.types.AddonPreferences):
 
         if pies:
             row = box.row(align=True)
-            row.prop(wm, "piebind_pie", text="编辑")
-            op = row.operator("piebind.test_pie", text="预览", icon="PLAY")
+            row.label(text="编辑：")
+            for item in pies[:6]:
+                op = row.operator(
+                    "piebind.select_pie",
+                    text=item.get("label") or item["id"],
+                    depress=(item["id"] == wm.piebind_pie),
+                )
+                op.pie_id = item["id"]
+            row = box.row(align=True)
+            op = row.operator("piebind.test_pie", text="预览当前饼", icon="PLAY")
             op.pie_id = wm.piebind_pie
             current = config.find_pie(data, wm.piebind_pie)
             if current:
@@ -291,7 +311,11 @@ class PIEBIND_AP_Preferences(bpy.types.AddonPreferences):
                 editor = box.box()
                 editor.label(text=f"编辑槽位 · {pie.SLOT_LABELS[wm.piebind_slot_pos]}", icon="EDIT")
                 editor.prop(wm, "piebind_slot_pos", text="方位")
+                editor.prop(wm, "piebind_slot_mode", text="模式")
+                if getattr(wm, "piebind_slot_mode", "AUTO") != "AUTO":
+                    editor.label(text="已选模式：将写入 object.mode_set（忽略下面的操作符）", icon="INFO")
                 _draw_operator_picker(editor, wm)
+                editor.prop(wm, "piebind_slot_props", text="属性 JSON")
                 row = editor.row(align=True)
                 row.prop(wm, "piebind_slot_text", text="文字")
                 row.prop(wm, "piebind_slot_icon", text="图标")

@@ -69,6 +69,32 @@ def _refresh_slot_pos(self, context):
     return [(pos, pie.SLOT_LABELS[pos], "") for pos in pie.SLOT_ORDER]
 
 
+SLOT_POS_ITEMS = [(pos, pie.SLOT_LABELS[pos], "") for pos in pie.SLOT_ORDER]
+
+MODE_ITEMS = [
+    ("AUTO", "不设置", ""),
+    ("OBJECT", "物体模式", ""),
+    ("EDIT", "编辑模式", ""),
+    ("SCULPT", "雕刻模式", ""),
+    ("VERTEX_PAINT", "顶点绘制", ""),
+    ("WEIGHT_PAINT", "权重绘制", ""),
+    ("TEXTURE_PAINT", "纹理绘制", ""),
+    ("POSE", "姿态模式", ""),
+]
+
+
+class PIEBIND_OT_select_pie(bpy.types.Operator):
+    bl_idname = "piebind.select_pie"
+    bl_label = "选择饼"
+    bl_options = {"REGISTER", "INTERNAL"}
+
+    pie_id: bpy.props.StringProperty()
+
+    def execute(self, context):
+        context.window_manager.piebind_pie = self.pie_id
+        return {"FINISHED"}
+
+
 ICON_ITEMS = [
     ("NONE", "无", ""),
     ("MESH_CUBE", "立方体", ""),
@@ -181,8 +207,8 @@ WM_PROPS = {
     "piebind_op_choice": lambda: bpy.props.StringProperty(
         name="操作符", default="", options={"SKIP_SAVE"},
     ),
-    "piebind_pie": lambda: bpy.props.EnumProperty(
-        name="饼菜单", items=_refresh_pie_items, options={"SKIP_SAVE"},
+    "piebind_pie": lambda: bpy.props.StringProperty(
+        name="饼菜单", default="", options={"SKIP_SAVE"},
     ),
     "piebind_force_override": lambda: bpy.props.BoolProperty(
         name="强制覆盖", default=False,
@@ -191,7 +217,13 @@ WM_PROPS = {
         name="仅 3D 视口", default=False,
     ),
     "piebind_slot_pos": lambda: bpy.props.EnumProperty(
-        name="方位", items=_refresh_slot_pos, options={"SKIP_SAVE"},
+        name="方位", items=SLOT_POS_ITEMS, options={"SKIP_SAVE"},
+    ),
+    "piebind_slot_mode": lambda: bpy.props.EnumProperty(
+        name="模式", items=MODE_ITEMS, default="AUTO", options={"SKIP_SAVE"},
+    ),
+    "piebind_slot_props": lambda: bpy.props.StringProperty(
+        name="属性 JSON", default="", options={"SKIP_SAVE"},
     ),
     "piebind_slot_text": lambda: bpy.props.StringProperty(
         name="文字", default="", options={"SKIP_SAVE"}
@@ -380,14 +412,36 @@ class PIEBIND_OT_add_slot(bpy.types.Operator):
         if not config.find_pie(data, pie_id):
             self.report({"ERROR"}, "请先选择饼")
             return {"CANCELLED"}
+
+        props = {}
+        raw = (wm.piebind_slot_props or "").strip()
+        if raw:
+            try:
+                parsed = json.loads(raw)
+                if isinstance(parsed, dict):
+                    props.update(parsed)
+                else:
+                    raise ValueError("需要 JSON 对象")
+            except Exception as exc:
+                self.report({"ERROR"}, f"属性 JSON 无效：{exc}")
+                return {"CANCELLED"}
+
+        mode = getattr(wm, "piebind_slot_mode", "AUTO")
+        default_text = ke.operator_label_zh(idname)
+        if mode and mode != "AUTO":
+            idname = "object.mode_set"
+            props["mode"] = mode
+            default_text = {key: label for key, label, _desc in MODE_ITEMS}.get(mode, mode)
+
         if not ke.has_operator(idname):
             self.report({"ERROR"}, f"操作符不存在：{idname}")
             return {"CANCELLED"}
         slot = {
             "kind": "operator",
             "idname": idname,
-            "text": wm.piebind_slot_text or ke.operator_label_zh(idname),
+            "text": wm.piebind_slot_text or default_text,
             "icon": wm.piebind_slot_icon or "NONE",
+            "props": props,
         }
         config.set_slot(data, pie_id, wm.piebind_slot_pos, slot)
         config.save(data)
@@ -638,4 +692,5 @@ CLASSES = (
     PIEBIND_OT_copy_diagnostics,
     PIEBIND_OT_dispatch,
     PIEBIND_OT_pick_operator,
+    PIEBIND_OT_select_pie,
 )
