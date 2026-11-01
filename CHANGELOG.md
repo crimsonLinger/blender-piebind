@@ -2,6 +2,27 @@
 
 倒序记录。每轮迭代追加：`## 日期 · 第N轮：一句话主题`，末尾写「当前状态 / 下一步 / 未验证」。
 
+## 2026-11-02 · 第16轮：改用 Area/Region.tag_redraw 真正刷新偏好设置面板
+
+### 反馈
+- 第 15 轮的 `redraw_timer` 方案无效：用户仍反馈“要动一下鼠标才出现”。
+
+### 排查
+- `hasattr(bpy.types.Area, "tag_redraw")` 为 False，但**实例上存在**（`bpy.types` 查不出方法）；
+- 实测遍历所有窗口：主窗口 `Layout`（4 个区域）+ 偏好设置窗口 `temp`（1 个区域），
+  对它们调用 `area.tag_redraw()` 全部成功，共标记 5 个区域。
+
+### 修复
+- `_schedule_redraw()` 改为遍历 `wm.windows → screen.areas → regions` 逐个 `tag_redraw()`；
+- 没有任何区域可标记时才退回 `redraw_timer` 兜底。
+
+### 验证
+- headless **58/58**；包 30.1 KB，已覆盖安装并启用。
+- 标记流程单独验证：输出 `SCREEN Layout … / SCREEN temp … / TAGGED 5`。
+
+### 未验证
+- 真实按键下的“立即可见”（需用户重启确认）。
+
 ## 2026-11-02 · 第15轮：捕获显示慢 = 面板不重绘；加主动强制重绘
 
 ### 定位

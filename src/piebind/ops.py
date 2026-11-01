@@ -420,20 +420,35 @@ def _clear_status(context):
 
 
 def _schedule_redraw():
-    """强制重绘一次：偏好设置窗口不会因属性变化自动刷新。"""
+    """给所有窗口的所有区域打重绘标记（偏好设置窗口不会因属性变化自动重绘）。"""
 
     def _redraw():
-        try:
-            wm = bpy.context.window_manager
-            win = getattr(bpy.context, "window", None)
-            if win is None and len(wm.windows):
-                win = wm.windows[0]
-            if win is None:
-                return None
-            with bpy.context.temp_override(window=win):
-                bpy.ops.wm.redraw_timer(type="DRAW_WIN_SWAP", iterations=1)
-        except Exception:
-            pass
+        wm = bpy.context.window_manager
+        tagged = 0
+        for win in wm.windows:
+            screen = win.screen
+            if screen is None:
+                continue
+            for area in screen.areas:
+                try:
+                    area.tag_redraw()
+                    tagged += 1
+                except Exception:
+                    pass
+                for region in area.regions:
+                    try:
+                        region.tag_redraw()
+                    except Exception:
+                        pass
+        if tagged == 0:
+            # 兜底：没有可标记区域时直接触发一次绘制
+            try:
+                win = getattr(bpy.context, "window", None) or (wm.windows[0] if len(wm.windows) else None)
+                if win is not None:
+                    with bpy.context.temp_override(window=win):
+                        bpy.ops.wm.redraw_timer(type="DRAW_WIN_SWAP", iterations=1)
+            except Exception:
+                pass
         return None
 
     try:
