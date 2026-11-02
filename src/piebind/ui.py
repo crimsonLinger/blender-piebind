@@ -220,6 +220,8 @@ class PIEBIND_AP_Preferences(bpy.types.AddonPreferences):
                 row.label(text=f"⚠{len(conflicts)}", icon=SEVERITY_ICON.get(level, "INFO"))
             if binding.get("force_override"):
                 row.label(text="", icon="LOCKED")
+            op = row.operator("piebind.check_binding", text="", icon="QUESTION")
+            op.binding_id = binding["id"]
             op = row.operator("piebind.capture_key", text="", icon="REC")
             op.binding_id = binding["id"]
             op = row.operator("piebind.delete_binding", text="", icon="X")
@@ -306,6 +308,13 @@ class PIEBIND_AP_Preferences(bpy.types.AddonPreferences):
                 box.label(text="点上面的下拉选择要编辑的饼（新建后会自动选中）", icon="INFO")
             else:
                 _draw_compass(box, wm, current)
+
+                _slots = current.get("slots") or {}
+                _filled = [pos for pos in pie.SLOT_ORDER if _slots.get(pos)]
+                box.label(
+                    text=f"已填槽位（{len(_filled)}）：{'、'.join(_filled) if _filled else '无'}",
+                    icon="INFO",
+                )
 
                 row = box.row(align=True)
                 op = row.operator("piebind.test_pie", text="预览当前饼", icon="PLAY")

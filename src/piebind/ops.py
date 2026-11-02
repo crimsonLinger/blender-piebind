@@ -155,6 +155,76 @@ MODE_ITEMS = [
 ]
 
 
+class PIEBIND_OT_slot_missing(bpy.types.Operator):
+    bl_idname = "piebind.slot_missing"
+    bl_label = "槽位不可用"
+    bl_options = {"REGISTER", "INTERNAL"}
+
+    slot_text: bpy.props.StringProperty()
+
+    def execute(self, context):
+        self.report({"WARNING"}, f"该槽位的操作符已不存在：{self.slot_text}")
+        return {"CANCELLED"}
+
+
+class PIEBIND_OT_check_binding(bpy.types.Operator):
+    bl_idname = "piebind.check_binding"
+    bl_label = "检查此绑定"
+    bl_options = {"REGISTER", "INTERNAL"}
+
+    binding_id: bpy.props.StringProperty()
+
+    def execute(self, context):
+        wm = context.window_manager
+        data = config.load()
+        binding = next((b for b in data.get("bindings", []) if b.get("id") == self.binding_id), None)
+        if binding is None:
+            self.report({"ERROR"}, "找不到该绑定")
+            return {"CANCELLED"}
+
+        spec = binding.get("keymap") or {}
+        key = binding.get("key") or {}
+        patch_count = 0
+        for kc in wm.keyconfigs:
+            for km in kc.keymaps:
+                for kmi in km.keymap_items:
+                    if kmi.idname != ke.DISPATCH_IDNAME:
+                        continue
+                    try:
+                        if kmi.properties.binding_id == binding["id"]:
+                            patch_count += 1
+                    except Exception:
+                        continue
+
+        target = binding.get("target") or {}
+        slot_info = "-"
+        if target.get("kind") == "pie":
+            pie_data = config.find_pie(data, target.get("id"))
+            if pie_data is None:
+                slot_info = "饼已不存在"
+            else:
+                slot_info = f"{len(pie_data.get('slots') or {})} 个槽位"
+
+        conflicts = ke.scan_conflict(spec, key) if spec else []
+        parts = [
+            f"键位 {ke.key_label(key)}",
+            f"keymap {spec.get('name', '?')}",
+            f"接管 {patch_count} 条",
+            f"冲突 {len(conflicts)} 条",
+            f"饼 {slot_info}",
+        ]
+        if not binding.get("enabled", True):
+            parts.insert(0, "【已停用】")
+        if patch_count == 0 and not binding.get("force_override"):
+            parts.append("未勾强制覆盖 → 可能被原键位抢先")
+        elif patch_count == 0:
+            parts.append("没有接管到任何条目 → 该 keymap 里没有这个键")
+        message = " · ".join(parts)
+        wm.piebind_status = f"检查：{message}"
+        self.report({"INFO"}, message)
+        return {"FINISHED"}
+
+
 class PIEBIND_OT_select_pie(bpy.types.Operator):
     bl_idname = "piebind.select_pie"
     bl_label = "选择饼"
@@ -934,6 +1004,8 @@ CLASSES = (
     PIEBIND_OT_dispatch,
     PIEBIND_OT_pick_operator,
     PIEBIND_OT_select_pie,
+    PIEBIND_OT_check_binding,
+    PIEBIND_OT_slot_missing,
     PIEBIND_OT_delete_pie,
     PIEBIND_OT_select_keymap,
     PIEBIND_MT_keymaps,

@@ -4,6 +4,8 @@
 空槽必须用 separator() 占位，否则后续条目会前移。
 """
 
+import os
+
 import bpy
 
 from . import config, keymap_engine as ke
@@ -41,11 +43,11 @@ def _draw_slot(layout, slot, context):
     text = slot.get("text") or ke.operator_label_zh(idname)
     icon = slot.get("icon") or "NONE"
 
+    # 注意：饼菜单里 layout.label() 不占一个饼位，会把后面的条目挤到一起。
+    # 所以无论可用与否都用操作符占位；poll 不通过的由 Blender 自动置灰。
     if not ke.has_operator(idname):
-        layout.label(text=f"{text}（已失效）", icon="ERROR")
-        return
-    if not ke.poll_ok(idname):
-        layout.label(text=f"{text}（当前上下文不可用）", icon="INFO")
+        op = layout.operator("piebind.slot_missing", text=f"{text}（已失效）", icon="ERROR")
+        op.slot_text = text
         return
 
     op = layout.operator(idname, text=text, icon=icon)
@@ -65,5 +67,13 @@ class PIEBIND_MT_pie(bpy.types.Menu):
         data = config.load()
         pie = config.find_pie(data, PIE_STATE.get("pie_id"))
         slots = (pie or {}).get("slots") or {}
+        debug = os.environ.get("PIEBIND_DEBUG_PIE")
         for pos in SLOT_ORDER:
-            _draw_slot(layout, slots.get(pos), context)
+            slot = slots.get(pos)
+            if debug:
+                try:
+                    with open(debug, "a", encoding="utf-8") as fh:
+                        fh.write(f"SLOT {pos} {'empty' if not slot else slot.get('idname')}\n")
+                except Exception:
+                    pass
+            _draw_slot(layout, slot, context)
