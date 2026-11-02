@@ -23,6 +23,7 @@ os.environ["PIEBIND_CONFIG_DIR"] = CONFIG_DIR
 
 import piebind  # noqa: E402
 from piebind import api, config, keymap_engine as ke, ops  # noqa: E402
+from piebind import pie as pie_mod  # noqa: E402
 
 PASSED = []
 FAILED = []
@@ -90,6 +91,50 @@ def main():
             if _m.group(1) not in _icons:
                 _bad.append(f"{_path.name}:{_text[:_m.start()].count(chr(10)) + 1}:{_m.group(1)}")
     check("源码中图标名全部合法", not _bad, _bad[:5])
+
+    section("饼菜单布局")
+    class _FakeLayout:
+        def __init__(self):
+            self.calls = []
+
+        def menu_pie(self):
+            self.calls.append("menu_pie")
+            return self
+
+        def operator(self, idname, **kwargs):
+            self.calls.append(("op", idname))
+            return type("Op", (), {})()
+
+        def separator(self):
+            self.calls.append("sep")
+
+        def label(self, **kwargs):
+            self.calls.append("label")
+
+    class _FakeSelf:
+        def __init__(self):
+            self.layout = _FakeLayout()
+
+    data = config.load()
+    pie_data = config.create_pie(data, "布局测试")
+    config.set_slot(data, pie_data["id"], "N", {
+        "kind": "operator", "idname": "object.mode_set", "text": "n",
+        "icon": "NONE", "props": {},
+    })
+    config.set_slot(data, pie_data["id"], "SE", {
+        "kind": "operator", "idname": "object.mode_set", "text": "se",
+        "icon": "NONE", "props": {},
+    })
+    config.save(data)
+    old_state = dict(pie_mod.PIE_STATE)
+    pie_mod.PIE_STATE["pie_id"] = pie_data["id"]
+    stub = _FakeSelf()
+    pie_mod.PIEBIND_MT_pie.draw(stub, bpy.context)
+    pie_mod.PIE_STATE.update(old_state)
+    ops_calls = [c for c in stub.layout.calls if isinstance(c, tuple)]
+    check("饼菜单使用 menu_pie()", "menu_pie" in stub.layout.calls, stub.layout.calls[:3])
+    check("饼菜单 8 个槽位都有占位", len(stub.layout.calls) == 1 + 8, len(stub.layout.calls))
+    check("只有已填槽位产生操作符", len(ops_calls) == 2, ops_calls)
 
     section("Keymap 列表")
     rows_all = ops.keymap_rows()

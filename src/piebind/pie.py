@@ -65,9 +65,15 @@ class PIEBIND_MT_pie(bpy.types.Menu):
     def draw(self, context):
         layout = self.layout
         data = config.load()
-        pie = config.find_pie(data, PIE_STATE.get("pie_id"))
-        slots = (pie or {}).get("slots") or {}
+        pie_data = config.find_pie(data, PIE_STATE.get("pie_id"))
+        slots = (pie_data or {}).get("slots") or {}
         debug = os.environ.get("PIEBIND_DEBUG_PIE")
+        # 关键：饼菜单必须用 layout.menu_pie() 创建饼布局，
+        # 直接往 self.layout 里加条目会被排成一列（所有选项挤在中心）。
+        pie = layout.menu_pie()
+        if not any(slots.get(pos) for pos in SLOT_ORDER):
+            pie.label(text="（这个饼还没有内容）", icon="INFO")
+            return
         for pos in SLOT_ORDER:
             slot = slots.get(pos)
             if debug:
@@ -76,4 +82,4 @@ class PIEBIND_MT_pie(bpy.types.Menu):
                         fh.write(f"SLOT {pos} {'empty' if not slot else slot.get('idname')}\n")
                 except Exception:
                     pass
-            _draw_slot(layout, slot, context)
+            _draw_slot(pie, slot, context)
