@@ -2,6 +2,27 @@
 
 倒序记录。每轮迭代追加：`## 日期 · 第N轮：一句话主题`，末尾写「当前状态 / 下一步 / 未验证」。
 
+## 2026-11-02 · 第26轮：侧键（BUTTON4~7MOUSE）调研与显示支持
+
+### 结论（实测）
+- Blender 5.2 事件类型里确有 `BUTTON4MOUSE` ~ `BUTTON7MOUSE`；
+- **模态能收到侧键**：原样记录模态的探针收到 `BUTTON4MOUSE/PRESS`、`BUTTON5MOUSE/PRESS`，
+  说明捕获侧键在原理上可行；
+- **键位绑定暂不可用**：用 Win32 `XBUTTON1/2` 实测了三种放法（Window 层 / 3D View keymap /
+  user+active keyconfig），`piebind.dispatch` 都**没有被调用**（`PIEBIND_DEBUG_DISPATCH` 日志为空）。
+  同样方式放 `LEFTMOUSE` 条目也不触发（运行期新增的鼠标条目似乎不进入事件分发）；
+  而键盘条目在 `keyconfigs.update()` 后是能触发的（此前已验证）。
+
+### 本轮改动
+- `key_label` 增加 `BUTTON4MOUSE→M4`、`BUTTON5→M5`、`BUTTON6→M6`、`BUTTON7→M7`；
+- `parse_key_text` 增加别名：`m4/m5/m6/m7`、`mouse4..7`、`button4..7`、`side/back/forward`；
+- 新增 2 条测试（侧键标签、侧键解析），headless **67/67**。
+
+### 现状 / 下一步
+- 键位绑定暂不支持侧键；若要支持，需要在**注册期**就往 keymap 里放条目（而不是运行期新增），
+  并让分发器按 `event.type` 反查绑定（不依赖 `binding_id` 属性）。留待下一轮。
+- 包 43.1 KB，已覆盖安装并启用。
+
 ## 2026-11-02 · 第25轮：键位显示全大写（绕开 Blender 的界面自动翻译）
 
 ### 现象

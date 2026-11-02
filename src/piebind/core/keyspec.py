@@ -103,6 +103,12 @@ _KEY_ALIASES = {
     "pageup": "PAGEUP", "pagedown": "PAGEDOWN", "insert": "INSERT",
     "up": "UP_ARROW", "down": "DOWN_ARROW", "left": "LEFT_ARROW", "right": "RIGHT_ARROW",
     "lmb": "LEFTMOUSE", "rmb": "RIGHTMOUSE", "mmb": "MIDDLEMOUSE",
+    "m4": "BUTTON4MOUSE", "m5": "BUTTON5MOUSE", "m6": "BUTTON6MOUSE", "m7": "BUTTON7MOUSE",
+    "mouse4": "BUTTON4MOUSE", "mouse5": "BUTTON5MOUSE",
+    "mouse6": "BUTTON6MOUSE", "mouse7": "BUTTON7MOUSE",
+    "button4": "BUTTON4MOUSE", "button5": "BUTTON5MOUSE",
+    "button6": "BUTTON6MOUSE", "button7": "BUTTON7MOUSE",
+    "side": "BUTTON4MOUSE", "back": "BUTTON4MOUSE", "forward": "BUTTON5MOUSE",
     "wheelup": "WHEELUPMOUSE", "wheeldown": "WHEELDOWNMOUSE",
     "menu": "APP", "quote": "QUOTE", "grave": "ACCENT_GRAVE",
 }

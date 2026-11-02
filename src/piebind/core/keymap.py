@@ -53,6 +53,8 @@ _DISPLAY = {
     # （实测 Tab→选项卡、Space→空间、Shift→移位、Home→主目录、Del→删除），
     # 大写形式不在翻译表里，能稳定按原样显示。
     "LEFTMOUSE": "LMB", "RIGHTMOUSE": "RMB", "MIDDLEMOUSE": "MMB",
+    "BUTTON4MOUSE": "M4", "BUTTON5MOUSE": "M5",
+    "BUTTON6MOUSE": "M6", "BUTTON7MOUSE": "M7",
     "WHEELUPMOUSE": "WHEELUP", "WHEELDOWNMOUSE": "WHEELDOWN",
     "SPACE": "SPACE", "RET": "ENTER", "NUMPAD_ENTER": "NUM ENTER",
     "ESC": "ESC", "TAB": "TAB", "BACKSPACE": "BACKSPACE", "DEL": "DEL",
