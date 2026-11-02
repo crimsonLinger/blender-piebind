@@ -50,6 +50,10 @@ def _deferred():
     except Exception:
         traceback.print_exc()
     try:
+        ops.register_side_keymap()
+    except Exception:
+        traceback.print_exc()
+    try:
         healed = ke.reconcile_journal()
         if healed.get("restored"):
             log(f"journal 自愈：恢复 {healed['restored']} 条键位")
@@ -88,6 +92,11 @@ def register():
     except Exception:
         traceback.print_exc()
 
+    try:
+        ops.register_side_keymap()
+    except Exception:
+        traceback.print_exc()
+
     if _on_load_post not in bpy.app.handlers.load_post:
         bpy.app.handlers.load_post.append(_on_load_post)
 
@@ -118,6 +127,11 @@ def unregister():
         pass
 
     ops.unregister_wm_props()
+
+    try:
+        ops.unregister_side_keymap()
+    except Exception:
+        traceback.print_exc()
 
     for cls in reversed(CLASSES):
         try:

@@ -2,6 +2,38 @@
 
 倒序记录。每轮迭代追加：`## 日期 · 第N轮：一句话主题`，末尾写「当前状态 / 下一步 / 未验证」。
 
+## 2026-11-02 · 第27轮：侧键（M4/M5）执行支持 —— 常驻监听方案，实测不稳定
+
+### 结论
+| 环节 | 状态 |
+|---|---|
+| 捕获侧键 | ✅ 可靠（Blender 把侧键作为 BUTTON4MOUSE~7 事件送给模态，原样记录实测收到 PRESS/RELEASE） |
+| 显示 / 解析 | ✅ `M4`~`M7`；`m4`、`mouse4`、`button4`、`side/back/forward` 别名 |
+| 触发绑定 | ⚠️ **不稳定**：常驻模态监听，实测 3 次里 1~2 次能触发 |
+
+### 关键实测结论
+1. 写进 keymap 的侧键条目**不会被事件分发**：Window 层、3D View keymap、user/active keyconfig 四种放法都试过，
+   `piebind.dispatch` 一次都没被调用（`PIEBIND_DEBUG_DISPATCH` 为空）；同样位置放 `LEFTMOUSE` 也不触发。
+2. 模态**能**收到侧键（`BUTTON4MOUSE/PRESS`）。
+3. 但模态必须在**真实窗口上下文**里挂载；从定时器或 `temp_override` 里挂，会出现
+   “立刻收到 WINDOW_DEACTIVATE 然后静默”——这就是不稳定的根因。
+
+### 实现
+- `ops/sidekeys.py`：常驻模态 `piebind.side_listener`（只拦侧键，其余 `PASS_THROUGH`），
+  按事件查配置里的绑定并执行；捕获期间自动放行（避免把要绑的侧键执行掉）。
+- 注册/延迟应用时尝试挂载；`piebind.dispatch` 执行时也补挂一次（真实按键上下文更可靠）。
+- 设置页新增「侧键」区块：显示监听状态 + 「重新挂载侧键监听」按钮。
+- 清掉测试期间写进用户配置的 9 条 `BUTTON4MOUSE → wm.context_toggle` 假绑定（保留原有 TAB 绑定 1 条）。
+
+### 验证
+- headless **71/71**（新增 `same_combo`、按事件反查绑定、侧键标签/解析 4 条）；
+- GUI：`side press BUTTON4MOUSE -> hit` → `called wm.context_toggle` → `use_snap` 由 False 变 True（成功样本）；
+  同一构建下也有失败样本（只挂上、不收事件），已如实记录。
+
+### 状态 / 下一步
+- 侧键“能用但不可靠”。可选方向：①接受尽力而为 + 手动重挂；②改成“先按一次键盘绑定再挂载”的确定性方案；
+  ③放弃执行支持，只保留捕获与显示。
+
 ## 2026-11-02 · 第26轮：侧键（BUTTON4~7MOUSE）调研与显示支持
 
 ### 结论（实测）

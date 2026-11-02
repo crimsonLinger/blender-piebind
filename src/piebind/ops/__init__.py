@@ -1,4 +1,4 @@
-"""操作符层：捕获、绑定、饼、分发、诊断、选择器。
+﻿"""操作符层：捕获、绑定、饼、分发、诊断、选择器。
 
 兼容：这里同时再导出常用的小工具与类名（历史代码/测试直接 `ops.xxx` 访问）。
 """
@@ -10,7 +10,7 @@ from ..core.keyspec import (
     parse_key_text,
     split_keymap_identifier,
 )
-from . import bindings, capture, common, diag, dispatch, pickers, pie_ops, settings
+from . import bindings, capture, common, diag, dispatch, pickers, pie_ops, settings, sidekeys
 from .bindings import (
     PIEBIND_OT_apply,
     PIEBIND_OT_check_binding,
@@ -34,6 +34,7 @@ from .common import (
 )
 from .diag import PIEBIND_OT_copy_diagnostics, PIEBIND_OT_export_diagnostics
 from .dispatch import PIEBIND_OT_dispatch, PIEBIND_OT_slot_missing
+from .sidekeys import (PIEBIND_OT_arm_side_listener, PIEBIND_OT_side_listener, register_side_keymap, unregister_side_keymap)
 from .pickers import (
     PIEBIND_MT_keymaps,
     PIEBIND_MT_operators,
@@ -85,6 +86,8 @@ CLASSES = (
     # 分发
     PIEBIND_OT_slot_missing,
     PIEBIND_OT_dispatch,
+    PIEBIND_OT_side_listener,
+    PIEBIND_OT_arm_side_listener,
     # 诊断
     PIEBIND_OT_export_diagnostics,
     PIEBIND_OT_copy_diagnostics,
@@ -95,3 +98,6 @@ CLASSES = (
 )
 
 __all__ = ["CLASSES", "WM_PROPS", "register_wm_props", "unregister_wm_props"]
+
+
+

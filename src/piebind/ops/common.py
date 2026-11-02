@@ -1,4 +1,4 @@
-"""ops 公共常量、WindowManager 属性与状态栏/重绘小工具。"""
+﻿"""ops 公共常量、WindowManager 属性与状态栏/重绘小工具。"""
 
 import json
 import os
@@ -142,6 +142,9 @@ WM_PROPS = {
     ),
     "piebind_show_new": lambda: bpy.props.BoolProperty(
         name="新建绑定", default=False, options={"SKIP_SAVE"}
+    ),
+    "piebind_capturing": lambda: bpy.props.BoolProperty(
+        name="正在捕获", default=False, options={"SKIP_SAVE"}
     ),
     "piebind_form_ready": lambda: bpy.props.BoolProperty(
         name="表单已初始化", default=False, options={"SKIP_SAVE"}
@@ -288,4 +291,5 @@ def _dispatch_debug(message):
             fh.write(str(message) + "\n")
     except Exception:
         pass
+
 

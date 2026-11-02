@@ -48,6 +48,13 @@ def normalize_key(key):
     return out
 
 
+def same_combo(a, b):
+    """两个 key 字典是否表示同一个组合（忽略 value / repeat）。"""
+    ka, kb = normalize_key(a), normalize_key(b)
+    fields = ("type", "ctrl", "shift", "alt", "oskey", "key_modifier")
+    return all(ka.get(name) == kb.get(name) for name in fields)
+
+
 _DISPLAY = {
     # 全部用大写：Blender 会把与界面文案完全相同的字符串自动翻译
     # （实测 Tab→选项卡、Space→空间、Shift→移位、Home→主目录、Del→删除），

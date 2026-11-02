@@ -26,6 +26,7 @@ class PIEBIND_OT_capture_key(bpy.types.Operator):
     def invoke(self, context, event):
         wm = context.window_manager
         wm.piebind_capture_label = "请按下组合键…（Esc 取消）"
+        wm.piebind_capturing = True
         _set_status(context, "PieBind：请按下组合键…")
         context.window_manager.modal_handler_add(self)
         _schedule_redraw()
@@ -33,6 +34,7 @@ class PIEBIND_OT_capture_key(bpy.types.Operator):
 
     def _finish(self, context, label, key):
         wm = context.window_manager
+        wm.piebind_capturing = False
         wm.piebind_key_json = json.dumps(key)
         if self.binding_id:
             data = config.load()
@@ -72,6 +74,7 @@ class PIEBIND_OT_capture_key(bpy.types.Operator):
                           "WINDOW_DEACTIVATE", "WINDOW_ACTIVATE"):
             return {"RUNNING_MODAL"}
         if event.type in CANCEL_EVENTS:
+            context.window_manager.piebind_capturing = False
             context.window_manager.piebind_capture_label = "已取消"
             _clear_status(context)
             _schedule_redraw()

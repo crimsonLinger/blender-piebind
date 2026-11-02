@@ -1,4 +1,4 @@
-"""偏好设置面板：页签式布局（绑定 / 饼菜单 / 设置 / 体检）。
+﻿"""偏好设置面板：页签式布局（绑定 / 饼菜单 / 设置 / 体检）。
 
 设计：面板本身只负责“分区 + 页签”，具体控件在 widgets / pickers 里复用。
 """
@@ -15,6 +15,11 @@ def draw_preferences(panel, context):
     wm = context.window_manager
     data = config.load()
     apply_form_defaults(wm)
+    try:
+        from ..ops import sidekeys
+        sidekeys.ensure_armed()
+    except Exception:
+        pass
 
     _draw_header(layout, wm, data)
     _draw_tabs(layout, wm)
@@ -216,6 +221,19 @@ def _draw_settings(layout, wm, data):
     row.operator("piebind.load_defaults", text="载入默认到表单", icon="IMPORT")
 
     box = layout.box()
+    box.label(text="侧键（鼠标 4 / 5 / 6 / 7 键）", icon="MOUSE_LMB")
+    try:
+        from ..ops import sidekeys
+        _armed = sidekeys.is_armed()
+    except Exception:
+        _armed = False
+    box.label(
+        text="监听：已挂载" if _armed else "监听：未挂载（点下面按钮重新挂载）",
+        icon="CHECKMARK" if _armed else "ERROR",
+    )
+    box.operator("piebind.arm_side_listener", text="重新挂载侧键监听", icon="PLAY")
+
+    box = layout.box()
     box.label(text="数据与诊断", icon="FILEBROWSER")
     row = box.row(align=True)
     row.operator("piebind.export_config", text="导出配置", icon="EXPORT")
@@ -230,3 +248,4 @@ def _draw_settings(layout, wm, data):
     box.label(text=f"PieBind 0.1.0 · 配置格式 v{config.SCHEMA_VERSION}")
     box.label(text="Agent API：piebind.api.call(action, payload)")
     box.label(text="测试绑定是否生效：绑定列表每行最左侧的 ? 按钮")
+

@@ -81,6 +81,25 @@ def main():
     check("侧键解析", (ops.parse_key_text("m5") or {}).get("type") == "BUTTON5MOUSE",
           ops.parse_key_text("m5"))
 
+    section("侧键匹配")
+    check("同组合匹配", ke.same_combo({"type": "BUTTON4MOUSE"},
+                                   {"type": "button4mouse", "value": "PRESS"}))
+    check("修饰键不同不匹配", not ke.same_combo(
+        {"type": "BUTTON4MOUSE", "ctrl": True}, {"type": "BUTTON4MOUSE"}))
+    from piebind.ops import dispatch as dispatch_mod
+    _side_data = {"bindings": [{
+        "id": "bd_side", "enabled": True,
+        "key": {"type": "BUTTON4MOUSE", "value": "PRESS"},
+        "keymap": {"name": "3D View", "space": "VIEW_3D", "region": "WINDOW"},
+        "target": {"kind": "operator", "id": "wm.context_toggle", "props": {}},
+    }]}
+    _hit = dispatch_mod.find_binding_for_key(
+        _side_data, {"type": "BUTTON4MOUSE", "value": "PRESS"})
+    check("按事件反查到侧键绑定", _hit is not None and _hit["id"] == "bd_side", _hit)
+    _miss = dispatch_mod.find_binding_for_key(
+        _side_data, {"type": "BUTTON5MOUSE", "value": "PRESS"})
+    check("不同侧键不误匹配", _miss is None)
+
     section("图标合法性")
     import re as _re
     import pathlib as _pathlib
