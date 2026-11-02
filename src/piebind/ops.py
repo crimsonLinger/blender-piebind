@@ -185,6 +185,7 @@ class PIEBIND_OT_check_binding(bpy.types.Operator):
         spec = binding.get("keymap") or {}
         key = binding.get("key") or {}
         patch_count = 0
+        patched_keymaps = []
         for kc in wm.keyconfigs:
             for km in kc.keymaps:
                 for kmi in km.keymap_items:
@@ -193,8 +194,16 @@ class PIEBIND_OT_check_binding(bpy.types.Operator):
                     try:
                         if kmi.properties.binding_id == binding["id"]:
                             patch_count += 1
+                            patched_keymaps.append(km.name)
                     except Exception:
                         continue
+
+        owners = ke.scan_key_owners(key)
+        foreign = [row for row in owners if not row["ours"]]
+        chosen_name = spec.get("name", "")
+        in_chosen = [row for row in foreign if row["keymap"] == chosen_name]
+        elsewhere = sorted({f"{row['keymap']}({row['idname']})" for row in foreign
+                            if row["keymap"] != chosen_name})[:3]
 
         target = binding.get("target") or {}
         slot_info = "-"
@@ -213,12 +222,16 @@ class PIEBIND_OT_check_binding(bpy.types.Operator):
             f"冲突 {len(conflicts)} 条",
             f"饼 {slot_info}",
         ]
+        if patched_keymaps:
+            parts.append("接管在：" + "、".join(sorted(set(patched_keymaps))[:3]))
+        if not chosen_name:
+            parts.append("未选择 keymap")
+        elif not in_chosen and elsewhere:
+            parts.append(f"所选 keymap 没有这个键；实际绑在：{'、'.join(elsewhere)}")
         if not binding.get("enabled", True):
             parts.insert(0, "【已停用】")
         if patch_count == 0 and not binding.get("force_override"):
             parts.append("未勾强制覆盖 → 可能被原键位抢先")
-        elif patch_count == 0:
-            parts.append("没有接管到任何条目 → 该 keymap 里没有这个键")
         message = " · ".join(parts)
         wm.piebind_status = f"检查：{message}"
         self.report({"INFO"}, message)

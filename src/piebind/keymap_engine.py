@@ -673,37 +673,86 @@ def _mute(records, spec, key, dry_run, skip_ids=None):
     return records
 
 
-def _patch_takeover(binding_id, spec, key):
+def _patch_takeover(binding_id, spec, key, allow_fallback=False):
     """就地接管：把命中的既有条目改写成分发器，原样记录以便复原。
 
     实测：区域 keymap 里被静音的条目仍会消费按键，因此不能靠「静音 + Window 层」覆盖，
     只能直接改写入键条目本身。
+
+    allow_fallback：所选 keymap 里没有这个键时，退一步接管「同空间或全局」keymap 里的同键条目
+    （例如 Tab 实际注册在 Object Non-modal，而用户选的是 3D View）。
     """
+    def candidates(strict):
+        for _layer, kc in iter_layers():
+            if strict:
+                km = find_keymap(kc, spec)
+                if km is None:
+                    continue
+                yield kc, km, "exact"
+            else:
+                want_space = spec.get("space") or "EMPTY"
+                for km in kc.keymaps:
+                    if getattr(km, "is_modal", False):
+                        continue
+                    if km.space_type not in (want_space, "EMPTY"):
+                        continue
+                    yield kc, km, "fallback"
+
+    def collect(strict):
+        found = []
+        for kc, km, mode in candidates(strict):
+            for kmi in list(km.keymap_items):
+                if not kmi.active or is_own(kmi):
+                    continue
+                if not combo_match(kmi, key):
+                    continue
+                found.append((kc, km, kmi))
+        return found
+
+    matches = collect(True)
+    if not matches and allow_fallback:
+        matches = collect(False)
+
     patched = []
-    for _layer, kc in iter_layers():
-        km = find_keymap(kc, spec)
-        if km is None:
+    for kc, km, kmi in matches:
+        record = {
+            "kc": kc.name,
+            "keymap": {"name": km.name, "space": km.space_type, "region": km.region_type},
+            "key": normalize_key(key),
+            "binding_id": binding_id,
+            "orig_idname": kmi.idname,
+            "orig_props": _props_snapshot(kmi),
+        }
+        try:
+            kmi.idname = DISPATCH_IDNAME
+            setattr(kmi.properties, "binding_id", binding_id)
+        except Exception:
             continue
-        for kmi in list(km.keymap_items):
-            if not kmi.active or is_own(kmi):
-                continue
-            if not combo_match(kmi, key):
-                continue
-            record = {
-                "kc": kc.name,
-                "keymap": dict(spec),
-                "key": normalize_key(key),
-                "binding_id": binding_id,
-                "orig_idname": kmi.idname,
-                "orig_props": _props_snapshot(kmi),
-            }
-            try:
-                kmi.idname = DISPATCH_IDNAME
-                setattr(kmi.properties, "binding_id", binding_id)
-            except Exception:
-                continue
-            patched.append(record)
+        patched.append(record)
     return patched
+
+
+def scan_key_owners(key):
+    """列出所有 keymap 里占用这个组合键的条目（用于诊断“键实际绑在哪”）。"""
+    rows = []
+    for kc in bpy.context.window_manager.keyconfigs:
+        for km in kc.keymaps:
+            if getattr(km, "is_modal", False):
+                continue
+            for kmi in km.keymap_items:
+                try:
+                    if not kmi.active or not combo_match(kmi, key):
+                        continue
+                except Exception:
+                    continue
+                rows.append({
+                    "keymap": km.name,
+                    "space": km.space_type,
+                    "idname": kmi.idname,
+                    "owner": resolve_owner(kmi),
+                    "ours": is_own(kmi),
+                })
+    return rows
 
 
 def restore_patches(records):
@@ -806,7 +855,7 @@ def apply(data, dry_run=False):
                         if kmi.active and not is_own(kmi) and combo_match(kmi, key)
                     ]
             else:
-                patched_here = _patch_takeover(binding.get("id"), spec, key)
+                patched_here = _patch_takeover(binding.get("id"), spec, key, allow_fallback=True)
         if patched_here:
             patched.extend(patched_here)
             report["created"].append({

@@ -2,6 +2,29 @@
 
 倒序记录。每轮迭代追加：`## 日期 · 第N轮：一句话主题`，末尾写「当前状态 / 下一步 / 未验证」。
 
+## 2026-11-02 · 第22轮：强制覆盖支持"跨 keymap 回退"，修 `scan_key_owners`
+
+### 用户状态行
+```
+检查：键位 Tab · keymap 3D View · 接管 1 条 · 冲突 0 条 · 饼 2 个槽位
+```
+- “接管 1 条”其实是插件自己在 Window 层创建的条目；`Tab` 在 Blender 里注册在 **Object Non-modal**，
+  3D View 里根本没有可接管的条目 → 按键仍被原条目消费。
+
+### 修复
+- `_patch_takeover(..., allow_fallback=True)`：所选 keymap 里找不到同键条目时，回退接管
+  **同空间或全局（space=EMPTY）** keymap 里的同键条目；`apply()` 已默认启用。
+- 接管记录改为写入**实际命中的 keymap**（原来写的是用户所选 keymap，回退时会复原不了）。
+- 新增 `scan_key_owners(key)`：列出所有 keymap 里占用该组合键的条目（含归属）。
+- 自检输出增强：显示“接管在：Object Non-modal”或“所选 keymap 没有这个键；实际绑在：Object Non-modal(object.mode_set)”。
+- 修 `scan_key_owners` 里 `resolve_owner(kmi.idname)` 传参错误（应为 kmi 对象）。
+
+### 验证（GUI 实机）
+- 配置 `3D View + Tab + 强制覆盖` → `apply` 报告 `patched: 4`；
+  实测条目：`Object Non-modal`、`Animation Channels` 的 Tab 均被改写为 `piebind.dispatch` 且 binding_id 正确；
+- `unapply` 后 `Object Non-modal` 的 Tab 恢复为 `object.mode_set`。
+- headless **62/62**；包 32.5 KB，已覆盖安装并启用。
+
 ## 2026-11-02 · 第21轮：饼菜单占位修复 + 绑定自检按钮 + 槽位概览
 
 ### 反馈
