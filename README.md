@@ -112,22 +112,37 @@ CI runs the same tests against Blender 4.2 / 4.5 / 5.2 (see `.github/workflows/c
 Layout:
 
 ```
-src/piebind/          add-on source (extension root)
-  __init__.py         registration, deferred apply, journal reconciliation
-  config.py           JSON storage, atomic writes, backups
-  keymap_engine.py    apply / mute / restore / conflict scan / attribution
-  pie.py              single static pie menu class
-  ops.py              capture, apply, restore, CRUD operators
-  ui.py               preferences panel, compass editor, inspector
-  api.py              in-process agent API
-  diagnostics.py      issue-ready environment snapshot
-tests/                headless tests + GUI override probe
+src/piebind/            add-on source (extension root)
+  __init__.py           registration, deferred apply, journal reconciliation
+  core/
+    config.py           JSON storage (schema v2: settings + pies + bindings), backups
+    keymap.py           apply / patch-takeover / restore / conflict scan / attribution
+    keyspec.py          key-combo parsing, keymap identifiers, keymap rows
+    pies.py             single static pie menu class (menu_pie layout)
+  ops/
+    common.py           WindowManager properties, status/redraw helpers
+    pickers.py          keymap / operator / pie dropdown menus
+    capture.py          modal key capture
+    bindings.py         apply / restore / binding CRUD / self-check
+    pie_ops.py          pie & slot CRUD, preview
+    dispatch.py         key dispatcher
+    diag.py             diagnostics export
+    settings.py         defaults, config folder
+  ui/
+    prefs.py            tabbed preferences panel (bindings / pies / settings / health)
+    pickers.py          reusable pickers
+    widgets.py          compass, conflict badges, health view
+    io_ops.py           config import/export, rescan
+  api.py                in-process agent API
+  diagnostics.py        issue-ready environment snapshot
+  config.py / keymap_engine.py / pie.py   compatibility aliases for 0.1.x imports
+tests/                  headless tests + GUI probes
 ```
 
 ## Roadmap
 
 - v0.1 — inspection, reversible overrides, 8-slot pies, agent API *(current)*
-- v0.2 — macros, nested menus, operator property forms
+- v0.2 — macros, nested menus, operator property forms, mode-scoped bindings
 - v0.3 — optional MCP bridge (separate package; the add-on itself stays network-free)
 
 ## License

@@ -1,4 +1,4 @@
-"""诊断导出：给 GitHub issue 用。默认对本地路径做脱敏。"""
+﻿"""诊断导出：给 GitHub issue 用。默认对本地路径做脱敏。"""
 
 import os
 import platform
@@ -7,7 +7,7 @@ import time
 
 import bpy
 
-from . import config, keymap_engine as ke
+from .core import config, keymap as ke
 
 VERSION = "0.1.0"
 HOME = os.path.expanduser("~")

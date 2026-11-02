@@ -15,10 +15,24 @@ import traceback
 
 import bpy
 
-from . import api, config, keymap_engine as ke, ops, pie, ui
+from . import api, core, ops, ui
+from .core import config, keymap as ke, pies as pie
+from .ops.settings import apply_form_defaults
+from .ui.prefs import draw_preferences
 
 LOG = "[PieBind]"
-CLASSES = (pie.PIEBIND_MT_pie,) + ops.CLASSES + ui.CLASSES
+
+
+class PIEBIND_AP_Preferences(bpy.types.AddonPreferences):
+    bl_idname = __package__
+
+    def draw(self, context):
+        draw_preferences(self, context)
+
+
+CLASSES = (
+    pie.PIEBIND_MT_pie,
+) + ui.CLASSES + ops.CLASSES + (PIEBIND_AP_Preferences,)
 
 _timer_registered = False
 
@@ -32,11 +46,13 @@ def _deferred():
     if os.environ.get("PIEBIND_NO_DEFERRED"):
         return None
     try:
+        apply_form_defaults(bpy.context.window_manager)
+    except Exception:
+        traceback.print_exc()
+    try:
         healed = ke.reconcile_journal()
         if healed.get("restored"):
             log(f"journal 自愈：恢复 {healed['restored']} 条键位")
-        # 已在启动时应用过且没有需要自愈的残留：不要 purge 重建
-        # （实测：运行中途重建的条目不会被事件系统接管，表现为按键无反应）
         if ke.APPLIED.get("items") and not healed.get("restored"):
             log("绑定已应用，跳过重复应用")
             return None

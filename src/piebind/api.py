@@ -1,4 +1,4 @@
-"""进程内 API：给 agent / 脚本调用，无需网络。
+﻿"""进程内 API：给 agent / 脚本调用，无需网络。
 
 用法::
 
@@ -19,7 +19,7 @@ import json
 
 import bpy
 
-from . import config, keymap_engine as ke
+from .core import config, keymap as ke
 from . import ops
 
 API_VERSION = 1

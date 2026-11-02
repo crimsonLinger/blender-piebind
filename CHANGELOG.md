@@ -2,6 +2,47 @@
 
 倒序记录。每轮迭代追加：`## 日期 · 第N轮：一句话主题`，末尾写「当前状态 / 下一步 / 未验证」。
 
+## 2026-11-02 · 第24轮：整体重构为 core / ops / ui 三层 + 页签式面板
+
+### 结构重构
+```
+piebind/
+  core/   config（schema v2）· keymap · keyspec · pies     ← 纯数据与引擎
+  ops/    common · capture · bindings · pie_ops · dispatch · pickers · diag · settings
+  ui/     prefs（页签面板）· pickers · widgets · io_ops
+  api.py / diagnostics.py
+  兼容层：config.py / keymap_engine.py / pie.py（PEP 562 别名，0.3 移除）
+```
+
+- 依赖方向单向：`ui → ops → core`，`core` 不再 import 界面或操作符。
+- `ops.py`（1000 行）拆成 8 个模块；`ui.py`（350 行）拆成 4 个模块。
+- 根 `__init__.py` 只保留注册/卸载/延迟应用，面板类 `bl_idname = __package__` 不变。
+
+### 数据模型 v2
+- 新增 `settings`：默认 keymap、默认强制覆盖、默认“仅 3D 视口”。
+- `_migrate()` 按 `schema_version` 自动补齐；旧配置（v1）可直接加载。
+- 新增操作符：`piebind.save_defaults` / `load_defaults` / `open_config_dir`。
+
+### 界面重做（页签）
+```
+[已应用 N · 绑定 N · 饼 N]            [应用] [复原]
+页签： 绑定 | 饼菜单 | 设置 | 体检
+```
+- **绑定**：列表行（勾选/键位/keymap/目标/冲突/自检/改键/删除）+ 可折叠的「新建绑定」表单；
+- **饼菜单**：饼下拉 → 罗盘 3x3（槽位名称带摘要）→ 已填槽位 N/8 → 槽位编辑器 → 预览；
+- **设置**：默认值、导入导出、配置目录、关于；
+- **体检**：插件键位扫描。
+- 选择器统一（keymap / 操作符 / 饼）全部走 `Menu`，不再用动态枚举。
+
+### 验证
+- headless **65/65**；
+- GUI 探针打开偏好设置并依次切换四个页签，**无 Traceback**（`PREFS SHOWN` → 四个 `TAB ...` → `TABS DONE`）；
+- 包 42.8 KB（文件数 26），已覆盖安装并启用。
+
+### 状态 / 下一步
+- 未验证：真实按键下的完整流程（绑定→按 Tab→饼→选模式）。
+- 待办：模式级限制（mode 字段）、槽位嵌套菜单、移除兼容层。
+
 ## 2026-11-02 · 第23轮：饼菜单条目挤在一起的真正原因 —— 少了 `layout.menu_pie()`
 
 ### 用户截图
