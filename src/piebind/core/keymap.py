@@ -49,12 +49,15 @@ def normalize_key(key):
 
 
 _DISPLAY = {
+    # 全部用大写：Blender 会把与界面文案完全相同的字符串自动翻译
+    # （实测 Tab→选项卡、Space→空间、Shift→移位、Home→主目录、Del→删除），
+    # 大写形式不在翻译表里，能稳定按原样显示。
     "LEFTMOUSE": "LMB", "RIGHTMOUSE": "RMB", "MIDDLEMOUSE": "MMB",
-    "WHEELUPMOUSE": "WheelUp", "WHEELDOWNMOUSE": "WheelDown",
-    "SPACE": "Space", "RET": "Enter", "NUMPAD_ENTER": "NumEnter",
-    "ESC": "Esc", "TAB": "Tab", "BACKSPACE": "Backspace", "DEL": "Del",
-    "HOME": "Home", "END": "End", "PAGEUP": "PgUp", "PAGEDOWN": "PgDn",
-    "UP_ARROW": "Up", "DOWN_ARROW": "Down", "LEFT_ARROW": "Left", "RIGHT_ARROW": "Right",
+    "WHEELUPMOUSE": "WHEELUP", "WHEELDOWNMOUSE": "WHEELDOWN",
+    "SPACE": "SPACE", "RET": "ENTER", "NUMPAD_ENTER": "NUM ENTER",
+    "ESC": "ESC", "TAB": "TAB", "BACKSPACE": "BACKSPACE", "DEL": "DEL",
+    "HOME": "HOME", "END": "END", "PAGEUP": "PGUP", "PAGEDOWN": "PGDN",
+    "UP_ARROW": "UP", "DOWN_ARROW": "DOWN", "LEFT_ARROW": "LEFT", "RIGHT_ARROW": "RIGHT",
 }
 _DIGITS = {
     "ONE": "1", "TWO": "2", "THREE": "3", "FOUR": "4", "FIVE": "5",
@@ -66,11 +69,11 @@ def key_label(key):
     k = normalize_key(key)
     parts = []
     if k["ctrl"]:
-        parts.append("Ctrl")
+        parts.append("CTRL")
     if k["shift"]:
-        parts.append("Shift")
+        parts.append("SHIFT")
     if k["alt"]:
-        parts.append("Alt")
+        parts.append("ALT")
     if k["oskey"]:
         parts.append("OS")
     name = k["type"]
@@ -78,13 +81,13 @@ def key_label(key):
         label = _DISPLAY[name]
     elif name.startswith("NUMPAD_"):
         tail = name[7:]
-        label = "Num" + _DIGITS.get(tail, tail.title())
+        label = "NUM" + _DIGITS.get(tail, tail.upper())
     elif name in _DIGITS:
         label = _DIGITS[name]
     elif len(name) == 1:
-        label = name
+        label = name.upper()
     else:
-        label = name.replace("_", " ").title()
+        label = name.replace("_", " ").upper()
     parts.append(label)
     if k["value"] not in ("PRESS", "ANY"):
         parts.append(f"({k['value'].lower()})")

@@ -1,4 +1,4 @@
-"""Headless 端到端测试。
+﻿"""Headless 端到端测试。
 
 运行：
   & 'D:\\Blender\\blender.exe' -b --factory-startup --python-exit-code 1 \
@@ -73,9 +73,9 @@ def main():
 
     section("键位标签")
     label = ke.key_label({"type": "E", "alt": True, "shift": True})
-    check("标签格式", label == "Shift+Alt+E", label)
+    check("标签格式", label == "SHIFT+ALT+E", label)
     label = ke.key_label({"type": "ONE", "ctrl": True})
-    check("数字键标签", label == "Ctrl+1", label)
+    check("数字键标签", label == "CTRL+1", label)
 
     section("图标合法性")
     import re as _re

@@ -62,6 +62,8 @@ def _draw_bindings(layout, wm, data):
     box.label(text=f"绑定（{len(bindings)}）", icon="HAND")
     if not bindings:
         box.label(text="还没有绑定：展开下面的「新建绑定」", icon="INFO")
+    else:
+        box.label(text="每行依次为：键位 · Keymap · 目标", icon="INFO")
     ordered = sorted(
         bindings,
         key=lambda b: ((b.get("keymap") or {}).get("name", ""), ke.key_label(b.get("key") or {})),
