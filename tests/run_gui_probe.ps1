@@ -3,10 +3,16 @@
 # Usage: pwsh -NoProfile -File tests\run_gui_probe.ps1
 
 param(
-    [string]$Script = ''
+    [string]$Script = '',
+    [string]$Blender = $env:BLENDER
 )
 
 $ErrorActionPreference = 'Stop'
+
+if ([string]::IsNullOrWhiteSpace($Blender)) { $Blender = 'blender' }
+if (-not (Test-Path $Blender) -and -not (Get-Command $Blender -ErrorAction SilentlyContinue)) {
+    throw "Blender not found: pass -Blender <path> or set the BLENDER env var"
+}
 
 $root   = Split-Path -Parent $PSScriptRoot
 if ([string]::IsNullOrWhiteSpace($Script)) {
@@ -42,7 +48,7 @@ public class WinProbe {
 "@
 
 Write-Host "[probe] launching blender (factory-startup)..."
-$proc = Start-Process -FilePath 'blender' `
+$proc = Start-Process -FilePath $Blender `
     -ArgumentList '--factory-startup', '-P', "`"$script`"" `
     -PassThru -RedirectStandardOutput $log -RedirectStandardError $errLog
 

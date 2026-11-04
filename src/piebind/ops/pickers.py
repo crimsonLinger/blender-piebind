@@ -3,7 +3,7 @@
 import bpy
 
 from ..core import config, keymap as ke, keyspec, pies as pie
-from .common import WM_PROPS, _on_query_update, _refresh_pie_items
+from .common import WM_PROPS, _on_query_update, _refresh_pie_items, flush_pending_save, load_slot_into_form
 
 
 class PIEBIND_OT_pick_operator(bpy.types.Operator):
@@ -18,8 +18,22 @@ class PIEBIND_OT_pick_operator(bpy.types.Operator):
         if not ke.has_operator(self.idname):
             self.report({"ERROR"}, f"操作符不存在：{self.idname}")
             return {"CANCELLED"}
+        previous = getattr(wm, "piebind_op_choice", "")
+        # 换操作符后旧参数不再适用，清掉避免串台（例如把 TOP 传给 bevel）
+        if previous and previous != self.idname:
+            wm.piebind_slot_props = ""
+        auto_labels = {"", previous}
+        for name in (previous, self.idname):
+            if not name:
+                continue
+            try:
+                auto_labels.add(ke.operator_label_zh(name))
+                auto_labels.add(ke.operator_label(name))
+            except Exception:
+                pass
+        text = (wm.piebind_slot_text or "").strip()
         wm.piebind_op_choice = self.idname
-        if not wm.piebind_slot_text:
+        if text in auto_labels:
             wm.piebind_slot_text = ke.operator_label_zh(self.idname)
         return {"FINISHED"}
 
@@ -46,7 +60,10 @@ class PIEBIND_OT_select_pie(bpy.types.Operator):
     pie_id: bpy.props.StringProperty()
 
     def execute(self, context):
-        context.window_manager.piebind_pie = self.pie_id
+        wm = context.window_manager
+        flush_pending_save(wm)
+        wm.piebind_pie = self.pie_id
+        load_slot_into_form(wm, pie_id=self.pie_id)
         return {"FINISHED"}
 
 
@@ -57,7 +74,7 @@ class PIEBIND_MT_keymaps(bpy.types.Menu):
     def draw(self, context):
         layout = self.layout
         wm = context.window_manager
-        rows = keymap_rows(getattr(wm, "piebind_keymap_query", ""))
+        rows = keyspec.keymap_rows(getattr(wm, "piebind_keymap_query", ""))
         if not rows:
             layout.label(text="没有匹配的 keymap")
             return

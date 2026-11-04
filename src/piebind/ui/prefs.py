@@ -1,11 +1,11 @@
-﻿"""偏好设置面板：页签式布局（绑定 / 饼菜单 / 设置 / 体检）。
+"""偏好设置面板：页签式布局（绑定 / 饼菜单 / 设置 / 体检）。
 
 设计：面板本身只负责“分区 + 页签”，具体控件在 widgets / pickers 里复用。
 """
 
 import json
 
-from ..core import config, keymap as ke, keyspec, pies as pie
+from ..core import config, keymap as ke, keyspec, pies as pie, presets
 from ..ops.settings import apply_form_defaults
 from . import pickers, widgets
 
@@ -162,17 +162,24 @@ def _draw_pies(layout, wm, data):
     box = layout.box()
     header = box.row(align=True)
     header.label(text=f"饼菜单（{len(pies)}）", icon="MESH_CIRCLE")
-    header.prop(wm, "piebind_new_pie_label", text="")
-    header.operator("piebind.create_pie", text="新建", icon="ADD")
+
+    naming = box.row(align=True)
+    naming.prop(wm, "piebind_new_pie_label", text="新饼名称")
+    naming.operator("piebind.create_pie", text="新建", icon="ADD")
 
     if not pies:
-        box.label(text="还没有饼：填名称 → 新建，然后点击方位添加功能", icon="INFO")
+        box.label(text="在上面填名称 → 点「新建」；建好后也能随时改名", icon="INFO")
         return
 
     current = pickers.pie_picker(box, wm, data, "编辑：")
     if current is None:
         box.label(text="点上面的下拉选择一个饼", icon="INFO")
         return
+
+    renaming = box.row(align=True)
+    renaming.label(text=f"当前名称：{current['label']}", icon="MESH_CIRCLE")
+    op = renaming.operator("piebind.rename_pie", text="改 名")
+    op.pie_id = current["id"]
 
     widgets.draw_compass(box, wm, current)
 
@@ -184,25 +191,38 @@ def _draw_pies(layout, wm, data):
     op.pie_id = current["id"]
 
     editor = box.box()
-    editor.label(
+    head = editor.row(align=True)
+    head.label(
         text=f"编辑槽位 · {pie.SLOT_LABELS[wm.piebind_slot_pos]}", icon="TOOL_SETTINGS"
     )
-    editor.prop(wm, "piebind_slot_pos", text="方位")
-    editor.prop(wm, "piebind_slot_mode", text="模式")
-    if getattr(wm, "piebind_slot_mode", "AUTO") != "AUTO":
-        editor.label(text="已选模式：将写入 object.mode_set（忽略下面的操作符）", icon="INFO")
+    head.operator("piebind.load_slot", text="载入", icon="FILE_REFRESH")
+    op = head.operator("piebind.remove_slot", text="清空", icon="X")
+    op.pie_id = current["id"]
+    op.pos = wm.piebind_slot_pos
+
     pickers.operator_picker(editor, wm)
 
     row = editor.row(align=True)
     row.prop(wm, "piebind_slot_text", text="文字")
     row.prop(wm, "piebind_slot_icon", text="图标")
-    editor.prop(wm, "piebind_slot_props", text="属性 JSON")
 
     row = editor.row(align=True)
-    row.operator("piebind.add_slot", text="写入槽位", icon="ADD")
-    op = row.operator("piebind.remove_slot", text="清空", icon="X")
-    op.pie_id = current["id"]
-    op.pos = wm.piebind_slot_pos
+    row.label(text="参数")
+    current_props = (wm.piebind_slot_props or "").strip()
+    preset_label = ""
+    if current_props:
+        try:
+            parsed = json.loads(current_props)
+            if isinstance(parsed, dict):
+                preset_label = presets.label_for(wm.piebind_op_choice, parsed)
+        except Exception:
+            preset_label = ""
+    if preset_label:
+        menu_text = f"{preset_label} ▾"
+    else:
+        menu_text = current_props[:32] if current_props else "点这里选预设（或下方手填 JSON）"
+    row.menu("PIEBIND_MT_slot_presets", text=menu_text, icon="PRESET")
+    editor.prop(wm, "piebind_slot_props", text="属性 JSON")
 
 
 # ---------------------------------------------------------------- 设置
@@ -217,7 +237,7 @@ def _draw_settings(layout, wm, data):
     box.label(text=f"强制覆盖：{'开' if block.get('force_override') else '关'}")
     box.label(text=f"仅 3D 视口：{'开' if block.get('restrict_view3d') else '关'}")
     row = box.row(align=True)
-    row.operator("piebind.save_defaults", text="用当前表单存为默认", icon="SAVE")
+    row.operator("piebind.save_defaults", text="用当前表单存为默认", icon="FILE_TICK")
     row.operator("piebind.load_defaults", text="载入默认到表单", icon="IMPORT")
 
     box = layout.box()

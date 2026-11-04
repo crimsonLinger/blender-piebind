@@ -1,8 +1,9 @@
-﻿"""ops 公共常量、WindowManager 属性与状态栏/重绘小工具。"""
+"""ops 公共常量、WindowManager 属性与状态栏/重绘小工具。"""
 
 import json
 import os
 import time
+import traceback
 
 import bpy
 
@@ -27,18 +28,6 @@ CANCEL_EVENTS = {"ESC", "NONE"}
 
 
 SLOT_POS_ITEMS = [(pos, pie.SLOT_LABELS[pos], "") for pos in pie.SLOT_ORDER]
-
-
-MODE_ITEMS = [
-    ("AUTO", "不设置", ""),
-    ("OBJECT", "物体模式", ""),
-    ("EDIT", "编辑模式", ""),
-    ("SCULPT", "雕刻模式", ""),
-    ("VERTEX_PAINT", "顶点绘制", ""),
-    ("WEIGHT_PAINT", "权重绘制", ""),
-    ("TEXTURE_PAINT", "纹理绘制", ""),
-    ("POSE", "姿态模式", ""),
-]
 
 
 ICON_ITEMS = [
@@ -69,10 +58,136 @@ ICON_ITEMS = [
     ("CHECKMARK", "确认", ""),
     ("PLAY", "播放", ""),
     ("REC", "录制", ""),
-    ("EDIT", "编辑", ""),
+    ("TOOL_SETTINGS", "编辑", ""),
     ("COPYDOWN", "复制值", ""),
     ("PASTEDOWN", "粘贴值", ""),
 ]
+
+
+def load_slot_into_form(wm, pie_id=None, pos=None):
+    """把某个槽位现有的内容读进编辑区；空槽则清空编辑区。
+
+    参数默认取当前选中的饼与方位。返回该槽位是否有内容。
+    """
+    pie_id = pie_id if pie_id is not None else getattr(wm, "piebind_pie", "")
+    pos = pos if pos else getattr(wm, "piebind_slot_pos", "N")
+    try:
+        data = config.load()
+    except Exception:
+        return False
+    pie_data = config.find_pie(data, pie_id)
+    slot = ((pie_data or {}).get("slots") or {}).get(pos) or {}
+    cancel_pending_save()
+    wm.piebind_suppress_save = True
+    try:
+        wm.piebind_op_choice = slot.get("idname", "") or ""
+        wm.piebind_slot_text = slot.get("text", "") or ""
+        props = slot.get("props") or {}
+        wm.piebind_slot_props = json.dumps(props, ensure_ascii=False) if props else ""
+        wm.piebind_slot_icon = pie.safe_icon(slot.get("icon"))
+    except Exception:
+        return False
+    finally:
+        wm.piebind_suppress_save = False
+    return bool(slot)
+
+
+# ---------------------------------------------------------------- 槽位自动保存
+# 编辑区任何字段变化后 0.6s 写盘一次（防抖），不再需要「写入槽位」按钮。
+_AUTOSAVE_TIMER = {"pending": False}
+
+
+def cancel_pending_save():
+    """取消尚未触发的自动保存（切饼 / 切槽位 / 载入时调用）。"""
+    try:
+        if bpy.app.timers.is_registered(_slot_save_timer):
+            bpy.app.timers.unregister(_slot_save_timer)
+    except Exception:
+        pass
+    _AUTOSAVE_TIMER["pending"] = False
+
+
+def save_current_slot(wm):
+    """把编辑区内容写回当前槽位；无变化/半截 JSON/不在饼页签时不写。"""
+    if getattr(wm, "piebind_suppress_save", False):
+        return False
+    if getattr(wm, "piebind_tab", "") != "pies":
+        return False
+    pie_id = getattr(wm, "piebind_pie", "")
+    idname = getattr(wm, "piebind_op_choice", "")
+    if not pie_id or not idname or not ke.has_operator(idname):
+        return False
+    try:
+        data = config.load()
+    except Exception:
+        return False
+    pie_data = config.find_pie(data, pie_id)
+    if pie_data is None:
+        return False
+
+    props = {}
+    raw = (getattr(wm, "piebind_slot_props", "") or "").strip()
+    if raw:
+        try:
+            parsed = json.loads(raw)
+        except Exception:
+            return False  # 用户正打到一半，等 JSON 合法再写
+        if not isinstance(parsed, dict):
+            return False
+        props = parsed
+
+    pos = getattr(wm, "piebind_slot_pos", "N")
+    slot = {
+        "kind": "operator",
+        "idname": idname,
+        "text": (getattr(wm, "piebind_slot_text", "") or "").strip()
+        or ke.operator_label_zh(idname),
+        "icon": pie.safe_icon(getattr(wm, "piebind_slot_icon", "NONE")),
+        "props": props,
+    }
+    existing = (pie_data.get("slots") or {}).get(pos)
+    if existing == slot:
+        return False
+    config.set_slot(data, pie_id, pos, slot)
+    config.save(data)
+    wm.piebind_status = f"已保存槽位 {pos}：{slot['text']}"
+    return True
+
+
+def _slot_save_timer():
+    _AUTOSAVE_TIMER["pending"] = False
+    try:
+        save_current_slot(bpy.context.window_manager)
+    except Exception:
+        traceback.print_exc()
+    return None
+
+
+def _schedule_slot_save(delay=0.6):
+    wm = bpy.context.window_manager
+    if getattr(wm, "piebind_tab", "") != "pies":
+        return
+    if getattr(wm, "piebind_suppress_save", False):
+        return
+    try:
+        if bpy.app.timers.is_registered(_slot_save_timer):
+            bpy.app.timers.unregister(_slot_save_timer)
+        _AUTOSAVE_TIMER["pending"] = True
+        bpy.app.timers.register(_slot_save_timer, first_interval=delay)
+    except Exception:
+        traceback.print_exc()
+
+
+def _on_slot_field_update(self, context):
+    _schedule_slot_save()
+
+
+def flush_pending_save(wm):
+    """切换饼/槽位之前，把还没落盘的编辑先写掉，避免丢改动。"""
+    if not _AUTOSAVE_TIMER.get("pending"):
+        return False
+    cancel_pending_save()
+    return save_current_slot(wm)
 
 
 WM_PROPS = {
@@ -97,6 +212,7 @@ WM_PROPS = {
     # 动态枚举在 WindowManager 上不可靠（下拉不刷新 items），改用字符串 + 按钮列表
     "piebind_op_choice": lambda: bpy.props.StringProperty(
         name="操作符", default="", options={"SKIP_SAVE"},
+        update=_on_slot_field_update,
     ),
     "piebind_pie": lambda: bpy.props.StringProperty(
         name="饼菜单", default="", options={"SKIP_SAVE"},
@@ -110,17 +226,20 @@ WM_PROPS = {
     "piebind_slot_pos": lambda: bpy.props.EnumProperty(
         name="方位", items=SLOT_POS_ITEMS, options={"SKIP_SAVE"},
     ),
-    "piebind_slot_mode": lambda: bpy.props.EnumProperty(
-        name="模式", items=MODE_ITEMS, default="AUTO", options={"SKIP_SAVE"},
-    ),
     "piebind_slot_props": lambda: bpy.props.StringProperty(
         name="属性 JSON", default="", options={"SKIP_SAVE"},
+        update=_on_slot_field_update,
     ),
     "piebind_slot_text": lambda: bpy.props.StringProperty(
-        name="文字", default="", options={"SKIP_SAVE"}
+        name="文字", default="", options={"SKIP_SAVE"},
+        update=_on_slot_field_update,
     ),
     "piebind_slot_icon": lambda: bpy.props.EnumProperty(
         name="图标", items=ICON_ITEMS, options={"SKIP_SAVE"},
+        update=_on_slot_field_update,
+    ),
+    "piebind_suppress_save": lambda: bpy.props.BoolProperty(
+        name="暂不自动保存", default=False, options={"SKIP_SAVE"},
     ),
     "piebind_new_pie_label": lambda: bpy.props.StringProperty(
         name="饼名称", default="新建饼", options={"SKIP_SAVE"}

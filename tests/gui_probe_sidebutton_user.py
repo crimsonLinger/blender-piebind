@@ -4,7 +4,7 @@ import os
 import sys
 import tempfile
 
-sys.path.insert(0, r"<旧目录>\src")
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "src"))
 os.environ["PIEBIND_CONFIG_DIR"] = tempfile.mkdtemp(prefix="pb-side3-")
 
 import bpy

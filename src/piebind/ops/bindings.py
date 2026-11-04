@@ -44,10 +44,10 @@ class PIEBIND_OT_create_binding(bpy.types.Operator):
 
     def execute(self, context):
         wm = context.window_manager
-        spec = split_keymap_identifier(wm.piebind_keymap)
+        spec = keyspec.split_keymap_identifier(wm.piebind_keymap)
         if spec is None:
             spec = {"name": "3D View", "space": "VIEW_3D", "region": "WINDOW"}
-            wm.piebind_keymap = make_keymap_identifier("3D View", "VIEW_3D", "WINDOW")
+            wm.piebind_keymap = keyspec.make_keymap_identifier("3D View", "VIEW_3D", "WINDOW")
             self.report({"WARNING"}, "未选择 Keymap，已默认 3D View")
         raw = wm.piebind_key_json
         if not raw:

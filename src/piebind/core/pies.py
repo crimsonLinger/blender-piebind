@@ -28,6 +28,30 @@ SLOT_LABELS = {
 # 当前要绘制的饼（由 piebind.call_pie 在调用前写入）
 PIE_STATE = {"pie_id": None}
 
+_ICON_CACHE = {"set": None}
+
+
+def valid_icons():
+    """Blender 图标枚举（缓存）；取不到时返回空集合，表示不校验。"""
+    cached = _ICON_CACHE["set"]
+    if cached is None:
+        try:
+            items = bpy.types.UILayout.bl_rna.functions["label"].parameters["icon"].enum_items
+            cached = {item.identifier for item in items}
+        except Exception:
+            cached = set()
+        _ICON_CACHE["set"] = cached
+    return cached
+
+
+def safe_icon(icon):
+    """老配置里可能残留已失效的图标名，绘制前兜底成 NONE。"""
+    icon = icon or "NONE"
+    known = valid_icons()
+    if known and icon not in known:
+        return "NONE"
+    return icon
+
 
 def _draw_slot(layout, slot, context):
     if not slot:
@@ -41,7 +65,7 @@ def _draw_slot(layout, slot, context):
 
     idname = slot.get("idname") or ""
     text = slot.get("text") or ke.operator_label_zh(idname)
-    icon = slot.get("icon") or "NONE"
+    icon = safe_icon(slot.get("icon"))
 
     # 注意：饼菜单里 layout.label() 不占一个饼位，会把后面的条目挤到一起。
     # 所以无论可用与否都用操作符占位；poll 不通过的由 Blender 自动置灰。

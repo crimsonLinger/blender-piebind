@@ -69,6 +69,13 @@ jobs:
           ~/blender/blender -b --factory-startup --python-exit-code 1 \
             --python tests/run_headless.py
 
+      - name: Operator smoke tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          ~/blender/blender -b --factory-startup --python-exit-code 1 \
+            --python tests/run_smoke_ops.py
+
       - name: Build extension package
         shell: bash
         run: |

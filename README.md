@@ -52,7 +52,7 @@ For development you can also copy `src/piebind` into
    Tick **Force override** to take the key anyway.
 4. Press **Save binding** — it is applied immediately and journaled.
 
-Build a pie: **New pie** → click a compass cell → search an operator → **Write slot**.
+Build a pie: **New pie** → click a compass cell → search an operator → pick a **preset** (optional) → **Write slot**.
 Preview it with **Preview**, then bind it like any other target.
 
 ## Honest limitations
@@ -99,7 +99,7 @@ local paths redacted. Please attach it to bug reports.
 ## Development
 
 ```bash
-# headless end-to-end tests (40 checks)
+# headless end-to-end tests (see tests/run_headless.py)
 blender -b --factory-startup --python-exit-code 1 --python tests/run_headless.py
 
 # build + validate the extension package into dist/

@@ -231,9 +231,32 @@ def clear_owned():
 
 
 # ---------------------------------------------------------------- mutations
+def unique_pie_label(data, label):
+    """同名饼自动加序号（只用于新建；显式改名不强制）。"""
+    label = (label or "").strip() or "新建饼"
+    used = {p.get("label") for p in data.get("pies", [])}
+    if label not in used:
+        return label
+    index = 2
+    while f"{label} {index}" in used:
+        index += 1
+    return f"{label} {index}"
+
+
 def create_pie(data, label="新建饼"):
-    pie = empty_pie(label)
+    pie = empty_pie(unique_pie_label(data, label))
     data["pies"].append(pie)
+    return pie
+
+
+def rename_pie(data, pie_id, label):
+    """改名；空名字保留原名，饼不存在返回 None。"""
+    pie = find_pie(data, pie_id)
+    if pie is None:
+        return None
+    label = (label or "").strip()
+    if label:
+        pie["label"] = label
     return pie
 
 

@@ -1,4 +1,4 @@
-﻿"""操作符层：捕获、绑定、饼、分发、诊断、选择器。
+"""操作符层：捕获、绑定、饼、分发、诊断、选择器。
 
 兼容：这里同时再导出常用的小工具与类名（历史代码/测试直接 `ops.xxx` 访问）。
 """
@@ -10,7 +10,7 @@ from ..core.keyspec import (
     parse_key_text,
     split_keymap_identifier,
 )
-from . import bindings, capture, common, diag, dispatch, pickers, pie_ops, settings, sidekeys
+from . import bindings, capture, common, diag, dispatch, pickers, pie_ops, presets, settings, sidekeys
 from .bindings import (
     PIEBIND_OT_apply,
     PIEBIND_OT_check_binding,
@@ -22,7 +22,6 @@ from .bindings import (
 from .capture import PIEBIND_OT_capture_key
 from .common import (
     ICON_ITEMS,
-    MODE_ITEMS,
     SLOT_POS_ITEMS,
     WM_PROPS,
     _operator_choices,
@@ -43,12 +42,15 @@ from .pickers import (
     PIEBIND_OT_select_keymap,
     PIEBIND_OT_select_pie,
 )
+from .presets import PIEBIND_MT_slot_presets, PIEBIND_OT_apply_slot_preset
 from .pie_ops import (
     PIEBIND_OT_add_slot,
     PIEBIND_OT_call_pie,
     PIEBIND_OT_create_pie,
     PIEBIND_OT_delete_pie,
+    PIEBIND_OT_load_slot,
     PIEBIND_OT_remove_slot,
+    PIEBIND_OT_rename_pie,
     PIEBIND_OT_select_slot,
     PIEBIND_OT_test_pie,
 )
@@ -63,9 +65,11 @@ CLASSES = (
     PIEBIND_MT_keymaps,
     PIEBIND_MT_pies,
     PIEBIND_MT_operators,
+    PIEBIND_MT_slot_presets,
     PIEBIND_OT_select_keymap,
     PIEBIND_OT_select_pie,
     PIEBIND_OT_pick_operator,
+    PIEBIND_OT_apply_slot_preset,
     # 捕获
     PIEBIND_OT_capture_key,
     # 绑定
@@ -77,10 +81,12 @@ CLASSES = (
     PIEBIND_OT_check_binding,
     # 饼
     PIEBIND_OT_create_pie,
+    PIEBIND_OT_rename_pie,
     PIEBIND_OT_delete_pie,
     PIEBIND_OT_add_slot,
     PIEBIND_OT_remove_slot,
     PIEBIND_OT_select_slot,
+    PIEBIND_OT_load_slot,
     PIEBIND_OT_test_pie,
     PIEBIND_OT_call_pie,
     # 分发

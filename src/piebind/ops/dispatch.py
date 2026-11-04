@@ -1,4 +1,4 @@
-﻿"""按键分发器：执行绑定目标（饼菜单或操作符），并支持侧键按事件反查。"""
+"""按键分发器：执行绑定目标（饼菜单或操作符），并支持侧键按事件反查。"""
 
 import bpy
 
@@ -55,6 +55,13 @@ def run_binding(context, binding, operator=None):
 
     target = binding.get("target") or {}
     if target.get("kind") == "pie":
+        # 后台（-b）里 call_menu_pie 会让 Blender 原生崩溃，抓不住；GUI 的定时器上下文虽然没有 area
+        # 但能正常弹饼，所以只按 bpy.app.background 拦。
+        if bpy.app.background:
+            _dispatch_debug("background: skip pie menu")
+            if operator is not None:
+                operator.report({"ERROR"}, "后台模式下无法打开饼菜单")
+            return {"CANCELLED"}
         pie.PIE_STATE["pie_id"] = target.get("id")
         try:
             return bpy.ops.wm.call_menu_pie("INVOKE_DEFAULT", name=pie.PIE_MENU_ID)
@@ -74,9 +81,11 @@ def run_binding(context, binding, operator=None):
     kwargs = dict(target.get("props") or {})
     op = getattr(getattr(bpy.ops, mod_name), op_name)
     try:
-        result = op("INVOKE_DEFAULT", **kwargs)
-    except TypeError:
-        result = op(**kwargs)
+        try:
+            result = op("INVOKE_DEFAULT", **kwargs)
+        except TypeError:
+            # 少数操作符不接受 INVOKE_DEFAULT；不带上下文再试一次
+            result = op(**kwargs)
     except Exception as exc:
         _dispatch_debug(f"call failed: {exc}")
         if operator is not None:
