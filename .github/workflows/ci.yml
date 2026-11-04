@@ -80,6 +80,8 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          # Blender writes dist/.<name>.zip.tmp before renaming; the folder must already exist
+          mkdir -p dist
           ~/blender/blender --command extension build \
             --source-dir src/piebind --output-dir dist
           ls -l dist

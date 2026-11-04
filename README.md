@@ -106,6 +106,7 @@ The full contributor guide (tests, packaging, layout, CI) is in
 blender -b --factory-startup --python-exit-code 1 --python tests/run_headless.py
 
 # build + validate the extension package into dist/
+mkdir -p dist
 blender --command extension build --source-dir src/piebind --output-dir dist
 blender --command extension validate dist/piebind-*.zip
 ```

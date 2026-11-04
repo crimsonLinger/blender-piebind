@@ -86,6 +86,7 @@ api.call("unapply")                                   # 全部复原
 blender -b --factory-startup --python-exit-code 1 --python tests/run_headless.py
 
 # 构建 + 校验扩展包到 dist/
+mkdir -p dist
 blender --command extension build --source-dir src/piebind --output-dir dist
 blender --command extension validate dist/piebind-*.zip
 ```

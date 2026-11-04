@@ -31,6 +31,10 @@ pwsh -File scripts/build.ps1 -Blender /path/to/blender
 
 Output: `dist/piebind-<version>.zip`, validated with `blender --command extension validate`.
 
+If you invoke Blender directly instead of the script, create the output folder first
+(`mkdir -p dist`): the build writes `dist/.<name>.zip` before renaming it, and fails if `dist/`
+does not exist.
+
 ## Install a development copy
 
 Copy `src/piebind` into `extensions/user_default/piebind` inside your Blender config directory,
