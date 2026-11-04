@@ -6,7 +6,7 @@ PieBind answers a question Blender's own Keymap editor never answers: *"which ad
 holding this shortcut?"* — then lets you take the key, and put everything back exactly as it
 was, in one click.
 
-[中文说明](README_zh.md)
+[中文说明](README_zh.md) · [Changelog](CHANGELOG.md) · [Development guide](DEVELOPMENT.md)
 
 ## Why
 
@@ -52,7 +52,7 @@ For development you can also copy `src/piebind` into
    Tick **Force override** to take the key anyway.
 4. Press **Save binding** — it is applied immediately and journaled.
 
-Build a pie: **New pie** → click a compass cell → search an operator → pick a **preset** (optional) → **Write slot**.
+Build a pie: **New pie** → click a compass cell → search an operator → pick a **preset** (optional). Edits are saved automatically.
 Preview it with **Preview**, then bind it like any other target.
 
 ## Honest limitations
@@ -97,6 +97,9 @@ version, keymap layer sizes, attributed add-on bindings, your bindings, duplicat
 local paths redacted. Please attach it to bug reports.
 
 ## Development
+
+The full contributor guide (tests, packaging, layout, CI) is in
+[DEVELOPMENT.md](DEVELOPMENT.md). Quick checks:
 
 ```bash
 # headless end-to-end tests (see tests/run_headless.py)
