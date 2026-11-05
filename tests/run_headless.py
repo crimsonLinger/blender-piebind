@@ -684,6 +684,39 @@ def main():
     ops.PIEBIND_MT_keymaps.draw(_host, bpy.context)
     check("Keymap 下拉可绘制", len(_host.layout.ops) > 0, len(_host.layout.ops))
 
+    section("快捷键展示")
+    _kc = bpy.context.window_manager.keyconfigs.active
+    _km = _kc.keymaps.get("3D View")
+    _created_km = False
+    if _km is None:
+        _km = _kc.keymaps.new("3D View", space_type="VIEW_3D")
+        _created_km = True
+    _kmi = _km.keymap_items.new("wm.context_toggle", type="H", value="PRESS")
+    _kmi.active = True
+    ke.shortcut_map(refresh=True)
+    _short_label = ke.shortcut_for("wm.context_toggle")
+    check("能查到操作符的现有键位", "H" in _short_label, _short_label)
+
+    wm.piebind_op_query = "context_toggle"
+    _menu_host = type("MenuHost", (), {})()
+    _menu_host.layout = _StubMenuLayout()
+    ops.PIEBIND_MT_operators.draw(_menu_host, bpy.context)
+    _menu_texts = [text for _idname, text in _menu_host.layout.ops]
+    check("搜索结果里带出快捷键", any("H" in text for text in _menu_texts), _menu_texts[:2])
+    ke.shortcut_map(refresh=True)
+    check("缓存刷新后仍可查", "H" in ke.shortcut_for("wm.context_toggle"))
+    try:
+        _km.keymap_items.remove(_kmi)
+    except Exception:
+        pass
+    if _created_km:
+        try:
+            _kc.keymaps.remove(_km)
+        except Exception:
+            pass
+    ke.shortcut_map(refresh=True)
+    check("未知操作符返回空键位", ke.shortcut_for("piebind.nope") == "")
+
     section("清单")
     print(f"\nPASSED {len(PASSED)} / FAILED {len(FAILED)}")
     for item in FAILED:

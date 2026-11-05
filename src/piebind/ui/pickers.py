@@ -10,6 +10,9 @@ def operator_picker(layout, wm):
     chosen = getattr(wm, "piebind_op_choice", "")
     if chosen and ke.has_operator(chosen):
         label = f"{ke.operator_label_zh(chosen)}"
+        shortcut = ke.shortcut_for(chosen)
+        if shortcut:
+            label += f"  [{shortcut}]"
     else:
         label = "选择操作符…"
     layout.menu("PIEBIND_MT_operators", text=label, icon="COLLAPSEMENU")

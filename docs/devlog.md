@@ -5,6 +5,27 @@
 
 每轮迭代追加：`## 日期 · 第N轮：一句话主题`，末尾写「当前状态 / 下一步 / 未验证」。
 
+## 2026-11-06 · 第41轮：操作符列表显示 Blender 自带快捷键
+
+### 反馈
+- 用户把「隐藏」绑进视图饼后条目变灰：实际选中的是 `outliner.hide`（大纲视图专用），
+  在 3D 视图里 `poll()` 不通过 → Blender 自动把菜单项置灰。
+- 追问：搜「隐藏」为什么搜不到 3D 视图的隐藏？因为 `object.hide_view_set` 在这个版本
+  没有中文翻译（仍叫 “Hide Objects”），搜索只按翻译名 / 英文名 / idname 匹配。
+
+### 改动
+- `core/keymap.py` 新增 `shortcut_map()` / `shortcut_for()`：只读汇总现有键位（30 秒缓存，
+  优先 3D 视图 / 全局），不改动任何键位；
+- 操作符搜索菜单每条结果显示 `— H / SHIFT+H`，已选操作符按钮显示 `[H / SHIFT+H]`。
+
+### 验证
+- headless **126/126**（新增：查询现有键位、搜索结果带快捷键、未知操作符返回空）；
+- GUI 实测：`object.hide_view_set => 'H / SHIFT+H'`、`object.hide_view_clear => 'ALT+H'`、
+  `outliner.hide => 'H'`、`view3d.view_axis => 'NUM1 / NUM3'`。
+
+### 状态 / 下一步
+- 用户侧把视图饼 N 槽改成 `object.hide_view_set` 即可；未发布到 GitHub 的部分随下一提交推送。
+
 ## 2026-11-05 · 第40轮：删掉「改动会自动保存」提示行，清空并入标题行
 
 ### 反馈

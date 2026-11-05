@@ -12,7 +12,7 @@ add-on itself. Everything below runs with the Blender binary you already have.
 ## Run the tests
 
 ```bash
-# end-to-end checks (122 assertions): config schema, keymap engine, dispatch, presets, UI callbacks
+# end-to-end checks (126 assertions): config schema, keymap engine, dispatch, presets, UI callbacks
 blender -b --factory-startup --python-exit-code 1 --python tests/run_headless.py
 
 # operator/menu smoke harness: every operator, every menu, all four preference tabs

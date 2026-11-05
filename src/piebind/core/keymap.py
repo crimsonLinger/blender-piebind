@@ -132,6 +132,76 @@ def iter_layers():
         yield kc.name, kc
 
 
+# ------------------------------------------------------- 内置快捷键（只读展示）
+_SHORTCUT_CACHE = {"map": None, "built": 0.0}
+_SHORTCUT_TTL = 30.0
+
+
+def shortcut_map(refresh=False):
+    """idname -> [(keymap 名, 键位标签)]，只读地汇总 Blender 现有键位。
+
+    结果缓存 30 秒；优先 3D 视图 / 全局（跨度 EMPTY）的条目。
+    """
+    now = time.time()
+    cached = _SHORTCUT_CACHE["map"]
+    if cached is not None and not refresh and (now - _SHORTCUT_CACHE["built"]) < _SHORTCUT_TTL:
+        return cached
+
+    order = {"Blender": 0, "Blender user": 1, "Blender addon": 2}
+    try:
+        configs = sorted(
+            bpy.context.window_manager.keyconfigs, key=lambda kc: order.get(kc.name, 9)
+        )
+    except Exception:
+        configs = []
+
+    collected = {}
+    for kc in configs:
+        for km in kc.keymaps:
+            preferred = km.space_type in ("EMPTY", "VIEW_3D")
+            for kmi in km.keymap_items:
+                try:
+                    if not kmi.active or not kmi.idname:
+                        continue
+                except Exception:
+                    continue
+                label = key_label({
+                    "type": kmi.type,
+                    "ctrl": kmi.ctrl,
+                    "shift": kmi.shift,
+                    "alt": kmi.alt,
+                    "oskey": kmi.oskey,
+                })
+                rank = 0 if preferred else 1
+                collected.setdefault(kmi.idname, []).append((rank, km.name, label))
+
+    result = {}
+    for idname, rows in collected.items():
+        rows.sort(key=lambda row: (row[0], row[1]))
+        seen_labels = set()
+        pairs = []
+        for _rank, km_name, label in rows:
+            if label in seen_labels:
+                continue
+            seen_labels.add(label)
+            pairs.append((km_name, label))
+        result[idname] = pairs
+    _SHORTCUT_CACHE.update(map=result, built=now)
+    return result
+
+
+def shortcut_for(idname, limit=2):
+    """返回该操作符在 Blender 键位里已存在的快捷键（只读展示）；没有则空串。"""
+    rows = shortcut_map().get(idname or "") or []
+    labels = []
+    for _km_name, label in rows:
+        if label not in labels:
+            labels.append(label)
+        if len(labels) >= limit:
+            break
+    return " / ".join(labels)
+
+
 def find_keymap(kc, spec):
     if kc is None or not isinstance(spec, dict):
         return None

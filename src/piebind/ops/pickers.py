@@ -128,8 +128,9 @@ class PIEBIND_MT_operators(bpy.types.Menu):
             layout.label(text=f"没有匹配：{query}" if query else "输入搜索词后打开")
             return
         for idn in hits:
-            op = layout.operator(
-                "piebind.pick_operator",
-                text=f"{ke.operator_label_zh(idn)} ({idn})",
-            )
+            shortcut = ke.shortcut_for(idn)
+            text = f"{ke.operator_label_zh(idn)} ({idn})"
+            if shortcut:
+                text += f"  —  {shortcut}"
+            op = layout.operator("piebind.pick_operator", text=text)
             op.idname = idn

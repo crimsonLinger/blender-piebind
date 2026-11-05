@@ -4,6 +4,14 @@ All notable changes to PieBind. This project follows [Semantic Versioning](https
 
 [中文更新日志](CHANGELOG_zh.md)
 
+## [Unreleased]
+
+### Added
+
+- Operator search results now show the operator's existing Blender shortcut (read-only), e.g.
+  `Hide Objects (object.hide_view_set) — H / SHIFT+H`; the selected-operator button shows it
+  too. This makes editor-specific operators (`outliner.*`, `node.*`, …) easier to tell apart.
+
 ## [0.1.0] — 2026-11-05
 
 First public release.

@@ -4,6 +4,14 @@ PieBind 的版本变更记录，遵循 [语义化版本](https://semver.org/lang
 
 [English changelog](CHANGELOG.md)
 
+## [未发布]
+
+### 新增
+
+- 操作符搜索结果会显示它在 Blender 里已有的快捷键（只读展示），例如
+  `隐藏物体 (object.hide_view_set) — H / SHIFT+H`；已选操作符的按钮上也会显示。
+  这样更容易区分 `outliner.*`、`node.*` 这类只在特定编辑器里可用的操作符。
+
 ## [0.1.0] — 2026-11-05
 
 首个公开版本。
