@@ -10,7 +10,7 @@ import time
 
 import bpy
 
-from . import config
+from . import config, keyspec
 
 OWN_PREFIX = "piebind."
 PIE_MENU_ID = "PIEBIND_MT_pie"
@@ -200,6 +200,31 @@ def shortcut_for(idname, limit=2):
         if len(labels) >= limit:
             break
     return " / ".join(labels)
+
+
+def shortcut_query_label(text):
+    """把 'h' / 'shift+h' / 'F8' 归一成展示用标签；不像按键写法时返回空串。"""
+    try:
+        parsed = keyspec.parse_key_text(text)
+    except Exception:
+        return ""
+    if not parsed or not parsed.get("type"):
+        return ""
+    return key_label(parsed)
+
+
+def shortcut_search(query):
+    """按内置键位搜索操作符：'H' / 'SHIFT+H' / 'F8' …"""
+    label = shortcut_query_label(query)
+    if not label:
+        return []
+    hits = []
+    for idname, rows in shortcut_map().items():
+        for _km_name, row_label in rows:
+            if row_label == label:
+                hits.append(idname)
+                break
+    return hits
 
 
 def find_keymap(kc, spec):
@@ -396,11 +421,31 @@ def iter_operator_ids():
 # 中文搜索需要「id -> 英文名 -> 本地化名」的索引；一次性构建后缓存到磁盘。
 _OP_INDEX = None
 _OP_INDEX_BY_ID = None
+_INDEX_FORMAT = 2
 
 
 def _index_path():
     locale = getattr(bpy.app.translations, "locale", "en") or "en"
-    return config.path_of(f"op_index_{bpy.app.version_string}_{locale}.json")
+    return config.path_of(f"op_index_v{_INDEX_FORMAT}_{bpy.app.version_string}_{locale}.json")
+
+
+def _localized_operator_name(english):
+    """操作符名字在 Blender 的 "Operator" 上下文里翻译；先试上下文再退回 iface。"""
+    if not english:
+        return ""
+    try:
+        translations = bpy.app.translations
+    except Exception:
+        return english
+    for context in ("Operator", None):
+        try:
+            text = translations.pgettext_iface(english, context) if context else \
+                translations.pgettext_iface(english)
+        except Exception:
+            text = ""
+        if text and text != english:
+            return text
+    return english
 
 
 def _build_index():
@@ -413,11 +458,7 @@ def _build_index():
             english = op.get_rna_type().name or idname
         except Exception:
             pass
-        localized = english
-        try:
-            localized = bpy.app.translations.pgettext_iface(english) or english
-        except Exception:
-            pass
+        localized = _localized_operator_name(english)
         rows.append([idname, english, localized])
     return rows
 
@@ -431,6 +472,8 @@ def operator_index():
         import json as _json
         with open(path, "r", encoding="utf-8") as fh:
             payload = _json.load(fh)
+        if payload.get("format") != _INDEX_FORMAT:
+            raise ValueError("stale operator index")
         rows = payload.get("rows") or []
         if rows:
             _OP_INDEX = rows
@@ -444,6 +487,7 @@ def operator_index():
         import json as _json
         with open(path, "w", encoding="utf-8") as fh:
             _json.dump({
+                "format": _INDEX_FORMAT,
                 "version": bpy.app.version_string,
                 "locale": getattr(bpy.app.translations, "locale", "en"),
                 "rows": _OP_INDEX,
@@ -462,14 +506,34 @@ def operator_label_zh(idname):
 
 
 def search_operators(query="", limit=40):
-    q = (query or "").strip().casefold()
+    raw = (query or "").strip()
+    q = raw.casefold()
     hits = []
-    for idname, english, localized in operator_index():
+    # 键位写法（H / SHIFT+H / F8）先把绑定在这些键上的操作符排在前面
+    if q:
+        for idname in shortcut_search(raw):
+            if idname not in hits:
+                hits.append(idname)
+            if len(hits) >= limit:
+                return hits
+    # 文本匹配：前缀命中优先，其余按索引顺序
+    scored = []
+    for order, (idname, english, localized) in enumerate(operator_index()):
         if q:
-            if (q not in idname.casefold()
-                    and q not in str(english).casefold()
-                    and q not in str(localized).casefold()):
+            low_id = idname.casefold()
+            low_en = str(english).casefold()
+            low_loc = str(localized).casefold()
+            if q not in low_id and q not in low_en and q not in low_loc:
                 continue
+            prefix = (low_loc.startswith(q) or low_en.startswith(q) or low_id.startswith(q))
+            score = 0 if prefix else 1
+        else:
+            score = 0
+        scored.append((score, order, idname))
+    scored.sort(key=lambda row: (row[0], row[1]))
+    for _score, _order, idname in scored:
+        if idname in hits:
+            continue
         hits.append(idname)
         if len(hits) >= limit:
             break

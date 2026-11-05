@@ -713,10 +713,21 @@ def main():
     ops.PIEBIND_MT_operators.draw(_menu_host, bpy.context)
     _menu_texts = [text for _idname, text in _menu_host.layout.ops]
     check("搜索结果里带出快捷键", any("H" in text for text in _menu_texts), _menu_texts[:2])
+
+    _h_hits = ke.search_operators("h", limit=10)
+    check("按键位搜索命中操作符", "wm.context_toggle" in _h_hits[:3], _h_hits[:5])
+    _shift_kmi = _km.keymap_items.new("wm.context_toggle", type="H", value="PRESS")
+    _shift_kmi.shift = True
+    _shift_kmi.active = True
+    ke.shortcut_map(refresh=True)
+    _shift_hits = ke.search_operators("shift+h", limit=10)
+    check("组合键搜索命中操作符", "wm.context_toggle" in _shift_hits[:3], _shift_hits[:5])
+    check("索引带格式版本", ke._INDEX_FORMAT == 2, ke._INDEX_FORMAT)
     ke.shortcut_map(refresh=True)
     check("缓存刷新后仍可查", "H" in ke.shortcut_for("wm.context_toggle"))
     try:
         _km.keymap_items.remove(_kmi)
+        _km.keymap_items.remove(_shift_kmi)
     except Exception:
         pass
     if _created_km:

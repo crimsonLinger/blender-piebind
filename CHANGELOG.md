@@ -13,6 +13,10 @@ All notable changes to PieBind. This project follows [Semantic Versioning](https
   too. This makes editor-specific operators (`outliner.*`, `node.*`, …) easier to tell apart.
 - Parameter presets now include boolean flags, and curated entries for hide/show
   (`隐藏所选（H）`, `隐藏未选中（Shift+H）`, `显示全部（Alt+H）`).
+- Search by built-in shortcut: typing `H`, `Shift+H` or `F8` lists the operators bound to that
+  key; text search also ranks prefix matches first.
+- Operator names are now translated with Blender's `Operator` context, so names that do have a
+  Chinese translation (e.g. `隐藏物体`, `框显全部`, `设置物体模式`) are found by Chinese search.
 
 ## [0.1.0] — 2026-11-05
 

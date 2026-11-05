@@ -5,6 +5,29 @@
 
 每轮迭代追加：`## 日期 · 第N轮：一句话主题`，末尾写「当前状态 / 下一步 / 未验证」。
 
+## 2026-11-06 · 第43轮：按键位搜索 + 修复中文翻译缺失
+
+### 反馈
+- 希望「搜索」支持按 Blender 内置键位查操作符；
+- 有些操作符明明有中文翻译，但搜索结果里只有英文。
+
+### 定位
+- 翻译缺失的根因：Blender 的操作符名字在 **"Operator" 上下文**里翻译，
+  而索引构建时用的是不带上下文的 `pgettext_iface(name)`，于是 `Hide Objects`、
+  `Frame All`、`Set Object Mode` 这些全部回落成英文（`查看轴向` 这类因同时存在于 iface 目录才碰巧正常）。
+
+### 改动
+- `_localized_operator_name()`：先 `pgettext_iface(name, "Operator")`，再退回 iface；索引格式升到 v2
+  （文件名与 payload 都带版本，旧缓存自动失效重建）；
+- 新增 `shortcut_query_label()` / `shortcut_search()`：把 `h` / `shift+h` / `F8` 归一成标签，
+  在 `shortcut_map()` 里找绑定该键的操作符；
+- `search_operators()`：键位命中排在前面，文本命中按「前缀优先」排序。
+
+### 验证
+- headless **132/132**（新增：按键位搜索、组合键搜索、索引格式版本）；
+- GUI 实测：`object.hide_view_set` 标签 `隐藏物体`；搜「隐藏」第 10 位出现它（菜单取 20 条）；
+  搜 `h` 命中 `object.hide_view_set`，搜 `shift+h` 同样命中。
+
 ## 2026-11-06 · 第42轮：参数预设支持布尔参数（隐藏/显示）
 
 ### 反馈
