@@ -37,9 +37,12 @@ from .sidekeys import (PIEBIND_OT_arm_side_listener, PIEBIND_OT_side_listener, r
 from .pickers import (
     PIEBIND_MT_keymaps,
     PIEBIND_MT_operators,
+    PIEBIND_MT_op_prefixes,
+    PIEBIND_MT_op_prefixes_all,
     PIEBIND_MT_pies,
     PIEBIND_OT_pick_operator,
     PIEBIND_OT_select_keymap,
+    PIEBIND_OT_select_op_prefix,
     PIEBIND_OT_select_pie,
 )
 from .presets import PIEBIND_MT_slot_presets, PIEBIND_OT_apply_slot_preset
@@ -65,9 +68,12 @@ CLASSES = (
     PIEBIND_MT_keymaps,
     PIEBIND_MT_pies,
     PIEBIND_MT_operators,
+    PIEBIND_MT_op_prefixes,
+    PIEBIND_MT_op_prefixes_all,
     PIEBIND_MT_slot_presets,
     PIEBIND_OT_select_keymap,
     PIEBIND_OT_select_pie,
+    PIEBIND_OT_select_op_prefix,
     PIEBIND_OT_pick_operator,
     PIEBIND_OT_apply_slot_preset,
     # 捕获

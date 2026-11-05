@@ -738,6 +738,24 @@ def main():
     ke.shortcut_map(refresh=True)
     check("未知操作符返回空键位", ke.shortcut_for("piebind.nope") == "")
 
+    section("操作符范围")
+    check("范围标签有中文", ke.prefix_label("view3d") == "3D 视图", ke.prefix_label("view3d"))
+    check("空范围显示全部", ke.prefix_label("") == "全部")
+    _obj_hits = ke.search_operators("", limit=20, prefix="object")
+    check("范围过滤只出 object.*",
+          bool(_obj_hits) and all(hit.startswith("object.") for hit in _obj_hits),
+          _obj_hits[:3])
+    _scoped_hits = ke.search_operators("view", limit=20, prefix="view3d")
+    check("范围与关键词叠加",
+          all(hit.startswith("view3d.") for hit in _scoped_hits), _scoped_hits[:3])
+    wm.piebind_op_query = ""
+    wm.piebind_op_prefix = ""
+    bpy.ops.piebind.select_op_prefix(prefix="object")
+    check("选择范围写入状态", wm.piebind_op_prefix == "object", wm.piebind_op_prefix)
+    check("选中项落在范围内", str(wm.piebind_op_choice).startswith("object."),
+          wm.piebind_op_choice)
+    wm.piebind_op_prefix = ""
+
     section("清单")
     print(f"\nPASSED {len(PASSED)} / FAILED {len(FAILED)}")
     for item in FAILED:

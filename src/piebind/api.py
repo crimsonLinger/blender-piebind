@@ -1,4 +1,4 @@
-﻿"""进程内 API：给 agent / 脚本调用，无需网络。
+"""进程内 API：给 agent / 脚本调用，无需网络。
 
 用法::
 
@@ -27,7 +27,7 @@ API_VERSION = 1
 ACTIONS = {
     "describe": "返回本 API 的动作目录与参数说明",
     "list_keymaps": "列出可用 keymap；参数 query, limit",
-    "search_operators": "搜索操作符；参数 query, limit",
+    "search_operators": "搜索操作符；参数 query, limit, prefix（模块前缀，如 object）",
     "list_pies": "列出饼菜单",
     "create_pie": "新建饼；参数 label, slots=[{pos, idname, text?, props?}]",
     "delete_pie": "删除饼；参数 pie_id",
@@ -90,9 +90,9 @@ def list_keymaps(query="", limit=200):
     return out
 
 
-def search_operators(query="", limit=20):
-    ids = ke.search_operators(query, limit=limit)
-    return [{"idname": i, "label": ke.operator_label(i)} for i in ids]
+def search_operators(query="", limit=20, prefix=""):
+    ids = ke.search_operators(query, limit=limit, prefix=prefix)
+    return [{"idname": i, "label": ke.operator_label_zh(i)} for i in ids]
 
 
 def list_pies():
@@ -283,7 +283,8 @@ def import_config(path, apply_after=False):
 _DISPATCH = {
     "describe": lambda **kw: describe(),
     "list_keymaps": lambda **kw: _ok(list_keymaps(kw.get("query", ""), kw.get("limit", 200))),
-    "search_operators": lambda **kw: _ok(search_operators(kw.get("query", ""), kw.get("limit", 20))),
+    "search_operators": lambda **kw: _ok(search_operators(
+        kw.get("query", ""), kw.get("limit", 20), kw.get("prefix", ""))),
     "list_pies": lambda **kw: _ok(list_pies()),
     "create_pie": lambda **kw: create_pie(kw.get("label", "新建饼"), kw.get("slots")),
     "delete_pie": lambda **kw: delete_pie(kw.get("pie_id")),

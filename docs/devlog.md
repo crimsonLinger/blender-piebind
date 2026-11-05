@@ -5,6 +5,26 @@
 
 每轮迭代追加：`## 日期 · 第N轮：一句话主题`，末尾写「当前状态 / 下一步 / 未验证」。
 
+## 2026-11-06 · 第44轮：操作符搜索加「范围」前缀过滤
+
+### 反馈
+- 建议在搜索前加前缀选择（object / view3d 之类），并把前缀翻译成中文。
+
+### 改动
+- `core/keymap.py`：新增 `PREFIX_LABELS`（object→物体、view3d→3D 视图、mesh→网格…）、
+  `COMMON_PREFIXES`、`prefix_label()`、`operator_prefixes()`；
+  `search_operators(..., prefix="")` 按 `idname.startswith(prefix + ".")` 过滤（键位命中同样受限）。
+- `ops/common.py`：新增 WM 属性 `piebind_op_prefix`；查询更新与枚举都带上范围。
+- `ops/pickers.py`：新增 `PIEBIND_MT_op_prefixes`（16 个常用 + 「更多…」）与
+  `PIEBIND_MT_op_prefixes_all`（全部 78 个模块）、`PIEBIND_OT_select_op_prefix`。
+- `ui/pickers.py`：搜索框右侧加「范围：全部/物体/3D 视图」按钮。
+- `api.py`：`search_operators` 支持 `prefix` 参数，标签改用中文名。
+
+### 验证
+- headless **138/138**（新增：范围标签、空范围、范围过滤、范围+关键词、选择范围写入状态）；
+- 冒烟 **41 OK / 0 FAIL**（两个新菜单分别 20 / 78 项）；
+- GUI 实测：选 `view3d` 后搜 `view`，10 条命中全部 `view3d.*`。
+
 ## 2026-11-06 · 第43轮：按键位搜索 + 修复中文翻译缺失
 
 ### 反馈

@@ -209,6 +209,9 @@ WM_PROPS = {
     "piebind_op_query": lambda: bpy.props.StringProperty(
         name="搜索", default="", options={"SKIP_SAVE"}, update=_on_query_update,
     ),
+    "piebind_op_prefix": lambda: bpy.props.StringProperty(
+        name="范围", default="", options={"SKIP_SAVE"},
+    ),
     # 动态枚举在 WindowManager 上不可靠（下拉不刷新 items），改用字符串 + 按钮列表
     "piebind_op_choice": lambda: bpy.props.StringProperty(
         name="操作符", default="", options={"SKIP_SAVE"},
@@ -305,7 +308,11 @@ def _refresh_slot_pos(self, context):
 
 def _on_query_update(self, context):
     """输入时把当前选择指向第一条命中，避免选到失效值。"""
-    hits = ke.search_operators(getattr(self, "piebind_op_query", ""), limit=40)
+    hits = ke.search_operators(
+        getattr(self, "piebind_op_query", ""),
+        limit=40,
+        prefix=getattr(self, "piebind_op_prefix", ""),
+    )
     if not hits:
         return
     try:
@@ -327,7 +334,9 @@ def _on_op_choice(self, context):
 
 def _operator_choices(self, context):
     query = getattr(self, "piebind_op_query", "")
-    hits = ke.search_operators(query, limit=40)
+    hits = ke.search_operators(
+        query, limit=40, prefix=getattr(self, "piebind_op_prefix", "")
+    )
     if not hits:
         return [("NONE", "(no match)", "")]
     return [(idn, f"{ke.operator_label(idn)} - {idn}", "") for idn in hits]

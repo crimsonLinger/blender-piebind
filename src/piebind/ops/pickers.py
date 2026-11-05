@@ -123,9 +123,11 @@ class PIEBIND_MT_operators(bpy.types.Menu):
         layout = self.layout
         wm = context.window_manager
         query = getattr(wm, "piebind_op_query", "")
-        hits = ke.search_operators(query, limit=20)
+        prefix = getattr(wm, "piebind_op_prefix", "")
+        hits = ke.search_operators(query, limit=20, prefix=prefix)
         if not hits:
-            layout.label(text=f"没有匹配：{query}" if query else "输入搜索词后打开")
+            scope = f"（范围：{ke.prefix_label(prefix)}）" if prefix else ""
+            layout.label(text=f"没有匹配：{query}{scope}" if query else "输入搜索词后打开")
             return
         for idn in hits:
             shortcut = ke.shortcut_for(idn)
@@ -134,3 +136,62 @@ class PIEBIND_MT_operators(bpy.types.Menu):
                 text += f"  —  {shortcut}"
             op = layout.operator("piebind.pick_operator", text=text)
             op.idname = idn
+
+
+class PIEBIND_OT_select_op_prefix(bpy.types.Operator):
+    bl_idname = "piebind.select_op_prefix"
+    bl_label = "选择操作符范围"
+    bl_options = {"REGISTER", "INTERNAL"}
+
+    prefix: bpy.props.StringProperty()
+
+    def execute(self, context):
+        wm = context.window_manager
+        wm.piebind_op_prefix = self.prefix
+        # 换范围后把选中项指到新范围的第一条，避免继续指向范围外的旧值
+        hits = ke.search_operators(
+            getattr(wm, "piebind_op_query", ""), limit=1, prefix=self.prefix
+        )
+        if hits:
+            wm.piebind_op_choice = hits[0]
+        return {"FINISHED"}
+
+
+class PIEBIND_MT_op_prefixes(bpy.types.Menu):
+    bl_label = "操作符范围"
+    bl_idname = "PIEBIND_MT_op_prefixes"
+
+    def draw(self, context):
+        layout = self.layout
+        current = getattr(context.window_manager, "piebind_op_prefix", "")
+        op = layout.operator(
+            "piebind.select_op_prefix", text="全部",
+            icon="CHECKMARK" if not current else "DOT",
+        )
+        op.prefix = ""
+        layout.separator()
+        for prefix in ke.COMMON_PREFIXES:
+            op = layout.operator(
+                "piebind.select_op_prefix",
+                text=f"{ke.prefix_label(prefix)}（{prefix}.*）",
+                icon="CHECKMARK" if prefix == current else "DOT",
+            )
+            op.prefix = prefix
+        layout.separator()
+        layout.menu("PIEBIND_MT_op_prefixes_all", text="更多…")
+
+
+class PIEBIND_MT_op_prefixes_all(bpy.types.Menu):
+    bl_label = "全部范围"
+    bl_idname = "PIEBIND_MT_op_prefixes_all"
+
+    def draw(self, context):
+        layout = self.layout
+        current = getattr(context.window_manager, "piebind_op_prefix", "")
+        for prefix in ke.operator_prefixes():
+            op = layout.operator(
+                "piebind.select_op_prefix",
+                text=f"{ke.prefix_label(prefix)}（{prefix}.*）",
+                icon="CHECKMARK" if prefix == current else "DOT",
+            )
+            op.prefix = prefix

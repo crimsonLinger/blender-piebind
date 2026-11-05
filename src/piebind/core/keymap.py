@@ -227,6 +227,57 @@ def shortcut_search(query):
     return hits
 
 
+# ---------------------------------------------------------------- 模块前缀
+PREFIX_LABELS = {
+    "object": "物体",
+    "view3d": "3D 视图",
+    "mesh": "网格",
+    "edit": "编辑",
+    "armature": "骨架",
+    "pose": "姿态",
+    "curve": "曲线",
+    "sculpt": "雕刻",
+    "wm": "窗口/全局",
+    "outliner": "大纲视图",
+    "node": "节点",
+    "image": "图像",
+    "uv": "UV",
+    "graph": "曲线编辑器",
+    "sequencer": "序列编辑器",
+    "grease_pencil": "蜡笔",
+    "text": "文本",
+    "clip": "影片剪辑",
+    "paint": "绘制",
+    "file": "文件",
+    "render": "渲染",
+    "screen": "屏幕",
+    "ui": "界面",
+    "preferences": "偏好设置",
+}
+
+COMMON_PREFIXES = (
+    "object", "view3d", "mesh", "edit", "armature", "pose",
+    "curve", "sculpt", "wm", "outliner", "node", "image",
+    "uv", "graph", "sequencer", "grease_pencil",
+)
+
+
+def prefix_label(prefix):
+    """模块前缀的中文显示名；未知前缀原样返回。"""
+    if not prefix:
+        return "全部"
+    return PREFIX_LABELS.get(prefix, prefix)
+
+
+def operator_prefixes():
+    """当前 Blender 里所有操作符模块前缀（object / view3d / …）。"""
+    mods = set()
+    for idname in iter_operator_ids():
+        if "." in idname:
+            mods.add(idname.split(".", 1)[0])
+    return sorted(mods)
+
+
 def find_keymap(kc, spec):
     if kc is None or not isinstance(spec, dict):
         return None
@@ -505,13 +556,22 @@ def operator_label_zh(idname):
     return operator_label(idname)
 
 
-def search_operators(query="", limit=40):
+def search_operators(query="", limit=40, prefix=""):
     raw = (query or "").strip()
     q = raw.casefold()
+    prefix = (prefix or "").strip()
+    if prefix and not prefix.endswith("."):
+        prefix = prefix + "."
+
+    def in_scope(idname):
+        return not prefix or idname.startswith(prefix)
+
     hits = []
     # 键位写法（H / SHIFT+H / F8）先把绑定在这些键上的操作符排在前面
     if q:
         for idname in shortcut_search(raw):
+            if not in_scope(idname):
+                continue
             if idname not in hits:
                 hits.append(idname)
             if len(hits) >= limit:
@@ -519,14 +579,16 @@ def search_operators(query="", limit=40):
     # 文本匹配：前缀命中优先，其余按索引顺序
     scored = []
     for order, (idname, english, localized) in enumerate(operator_index()):
+        if not in_scope(idname):
+            continue
         if q:
             low_id = idname.casefold()
             low_en = str(english).casefold()
             low_loc = str(localized).casefold()
             if q not in low_id and q not in low_en and q not in low_loc:
                 continue
-            prefix = (low_loc.startswith(q) or low_en.startswith(q) or low_id.startswith(q))
-            score = 0 if prefix else 1
+            prefix_hit = (low_loc.startswith(q) or low_en.startswith(q) or low_id.startswith(q))
+            score = 0 if prefix_hit else 1
         else:
             score = 0
         scored.append((score, order, idname))

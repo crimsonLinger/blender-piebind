@@ -4,9 +4,11 @@ from ..core import config, keymap as ke, keyspec, pies as pie
 
 
 def operator_picker(layout, wm):
-    """搜索框 + 下拉菜单选择操作符（中文优先）。"""
+    """搜索框 + 范围（模块前缀）+ 下拉菜单选择操作符（中文优先）。"""
     row = layout.row(align=True)
     row.prop(wm, "piebind_op_query", text="搜索")
+    prefix = getattr(wm, "piebind_op_prefix", "")
+    row.menu("PIEBIND_MT_op_prefixes", text=f"范围：{ke.prefix_label(prefix)}")
     chosen = getattr(wm, "piebind_op_choice", "")
     if chosen and ke.has_operator(chosen):
         label = f"{ke.operator_label_zh(chosen)}"

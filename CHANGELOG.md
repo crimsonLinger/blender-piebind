@@ -17,6 +17,8 @@ All notable changes to PieBind. This project follows [Semantic Versioning](https
   key; text search also ranks prefix matches first.
 - Operator names are now translated with Blender's `Operator` context, so names that do have a
   Chinese translation (e.g. `隐藏物体`, `框显全部`, `设置物体模式`) are found by Chinese search.
+- Operator search can be scoped to a module prefix (`object`, `view3d`, `mesh`, …), shown with
+  a translated label (`物体`, `3D 视图`, `网格`, …); `全部` searches everything.
 
 ## [0.1.0] — 2026-11-05
 
