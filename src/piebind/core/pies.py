@@ -70,8 +70,22 @@ def slot_for_mode(slot, mode):
             if normalize_mode(variant.get("mode")) == mode:
                 merged = dict(base)
                 merged.update({k: v for k, v in variant.items() if k != "mode"})
+                # 变体存在但还没填操作符时，同样回落到基础绑定
+                if not merged.get("idname"):
+                    return base
                 return merged
     return base
+
+
+def variant_for(slot, mode):
+    """返回该模式的变体字典（不存在返回 None）。"""
+    mode = normalize_mode(mode)
+    if not mode:
+        return None
+    for variant in (slot or {}).get("variants") or []:
+        if normalize_mode(variant.get("mode")) == mode:
+            return variant
+    return None
 
 _ICON_CACHE = {"set": None}
 

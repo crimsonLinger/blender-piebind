@@ -206,9 +206,13 @@ def _draw_pies(layout, wm, data):
         text=f"模式：{pie.mode_label(wm.piebind_edit_mode)}",
     )
     if wm.piebind_edit_mode:
-        mode_row.operator(
-            "piebind.remove_edit_variant", text="删除该模式", icon="X"
-        )
+        _slot = (current.get("slots") or {}).get(wm.piebind_slot_pos) or {}
+        if pie.variant_for(_slot, wm.piebind_edit_mode) is None:
+            mode_row.label(text="继承「所有模式」")
+        else:
+            mode_row.operator(
+                "piebind.remove_edit_variant", text="删除该模式", icon="X"
+            )
 
     pickers.operator_picker(editor, wm)
 

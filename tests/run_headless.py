@@ -555,6 +555,27 @@ def main():
           and _after_remove.get("idname") == "view3d.view_axis"
           and wm.piebind_edit_mode == "", _after_remove)
 
+    _empty_variant_slot = {
+        "kind": "operator",
+        "idname": "object.hide_view_set",
+        "text": "隐藏",
+        "props": {"unselected": False},
+        "variants": [{"mode": "EDIT", "idname": ""}],
+    }
+    check("空变体回落到基础",
+          pie_mod.slot_for_mode(_empty_variant_slot, "EDIT_MESH")["idname"]
+          == "object.hide_view_set")
+    wm.piebind_edit_mode = "SCULPT"
+    bpy.ops.piebind.load_slot()
+    check("未配置模式显示基础绑定",
+          wm.piebind_op_choice == "view3d.view_axis", wm.piebind_op_choice)
+    check("与基础一致不生成变体", _common.save_current_slot(wm) is False)
+    _sculpt_slot = ((config.find_pie(config.load(), auto_pie["id"]) or {}).get("slots") or {}).get("N") or {}
+    check("没有多出雕刻变体",
+          not any(v.get("mode") == "SCULPT" for v in _sculpt_slot.get("variants") or []),
+          _sculpt_slot.get("variants"))
+    wm.piebind_edit_mode = ""
+
     wm.piebind_slot_props = '{"type": "BACK"}'
     _common._AUTOSAVE_TIMER["pending"] = True
     _flushed = _common.flush_pending_save(wm)

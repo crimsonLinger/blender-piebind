@@ -67,8 +67,8 @@ ICON_ITEMS = [
 def load_slot_into_form(wm, pie_id=None, pos=None, mode=None):
     """把某个槽位现有的内容读进编辑区；空槽则清空编辑区。
 
-    参数默认取当前选中的饼、方位与「编辑模式」。当前模式没有变体时清空编辑区，
-    方便直接为这个模式新建一份。返回该槽位（或该模式变体）是否有内容。
+    参数默认取当前选中的饼、方位与「编辑模式」。当前模式没有变体时显示基础槽位
+    （同一功能的默认绑定），改动后会自动存成该模式的变体。返回是否有内容。
     """
     pie_id = pie_id if pie_id is not None else getattr(wm, "piebind_pie", "")
     pos = pos if pos else getattr(wm, "piebind_slot_pos", "N")
@@ -80,11 +80,6 @@ def load_slot_into_form(wm, pie_id=None, pos=None, mode=None):
     pie_data = config.find_pie(data, pie_id)
     slot = ((pie_data or {}).get("slots") or {}).get(pos) or {}
     resolved = pie.slot_for_mode(slot, mode) if mode else slot
-    if mode and not any(
-        pie.normalize_mode(v.get("mode")) == pie.normalize_mode(mode)
-        for v in (slot.get("variants") or [])
-    ):
-        resolved = {}
     cancel_pending_save()
     wm.piebind_suppress_save = True
     try:
@@ -161,14 +156,21 @@ def save_current_slot(wm):
         # 编辑「所有模式」或基础槽位还空着时，写基础字段
         slot.update(payload)
     if mode:
+        # 变体与基础完全一致时不单独存，继续继承基础（相当于「默认用同一份」）
+        same_as_base = payload == {key: slot.get(key) for key in
+                                   ("idname", "text", "icon", "props")}
         variants = [
             variant for variant in (existing.get("variants") or [])
             if pie.normalize_mode(variant.get("mode")) != mode
         ]
-        variants.append({"mode": mode, **payload})
-        variants.sort(key=lambda item: pie._MODE_KEYS.index(item.get("mode"))
-                      if item.get("mode") in pie._MODE_KEYS else 99)
-        slot["variants"] = variants
+        if not same_as_base:
+            variants.append({"mode": mode, **payload})
+            variants.sort(key=lambda item: pie._MODE_KEYS.index(item.get("mode"))
+                          if item.get("mode") in pie._MODE_KEYS else 99)
+        if variants:
+            slot["variants"] = variants
+        else:
+            slot.pop("variants", None)
     else:
         slot.pop("variants", None)
     if existing == slot:

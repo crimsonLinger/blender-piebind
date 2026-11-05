@@ -23,6 +23,9 @@ All notable changes to PieBind. This project follows [Semantic Versioning](https
   编辑 / 雕刻 / 顶点绘制 / 权重绘制 / 纹理绘制 / 姿态), and a slot draws the variant matching
   the current mode, falling back to the base operator. One slot can therefore hide objects in
   Object Mode and mesh elements in Edit Mode on the same `Shift+H`.
+- An empty (or base-identical) mode variant now inherits the base binding: the pie never goes
+  blank because a variant was added but not filled in, and the editor shows the inherited
+  content with an `继承「所有模式」` hint.
 
 ## [0.1.0] — 2026-11-05
 
