@@ -107,6 +107,24 @@ def create_pie(label="新建饼", slots=None):
         idname = slot.get("idname") or ""
         if pos not in ("W", "E", "S", "N", "NW", "NE", "SW", "SE"):
             continue
+        if slot.get("kind") == "menu":
+            children = []
+            for child in slot.get("children") or []:
+                child_id = child.get("idname") or ""
+                if ke.has_operator(child_id):
+                    children.append({
+                        "idname": child_id,
+                        "text": child.get("text") or "",
+                        "props": child.get("props") or {},
+                    })
+            if children:
+                config.set_slot(data, created["id"], pos, {
+                    "kind": "menu",
+                    "idname": children[0]["idname"],
+                    "text": slot.get("text") or "",
+                    "children": children,
+                })
+                continue
         if not ke.has_operator(idname):
             return _err("OP_NOT_FOUND", f"操作符不存在：{idname}", "试试 api.call('search_operators', query=...)")
         payload = {

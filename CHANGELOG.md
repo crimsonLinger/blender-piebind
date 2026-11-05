@@ -26,6 +26,8 @@ All notable changes to PieBind. This project follows [Semantic Versioning](https
 - An empty (or base-identical) mode variant now inherits the base binding: the pie never goes
   blank because a variant was added but not filled in, and the editor shows the inherited
   content with an `继承「所有模式」` hint.
+- A slot can hold a list of operators and render as a submenu (点开后侧边展开一列); the slot
+  editor grows `＋ 当前操作符加入子项` plus a removable child list.
 
 ## [0.1.0] — 2026-11-05
 

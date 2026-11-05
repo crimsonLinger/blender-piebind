@@ -576,6 +576,82 @@ def main():
           _sculpt_slot.get("variants"))
     wm.piebind_edit_mode = ""
 
+    section("子菜单槽位")
+    check("子菜单类已注册", len(pie_mod.SUBMENU_CLASSES) == 8)
+    _menu_data = config.load()
+    _menu_pie = config.create_pie(_menu_data, "子菜单测试")
+    config.set_slot(_menu_data, _menu_pie["id"], "NW", {
+        "kind": "menu",
+        "idname": "mesh.delete",
+        "text": "删除…",
+        "children": [
+            {"idname": "mesh.delete", "text": "Only Faces", "props": {"type": "ONLY_FACE"}},
+            {"idname": "mesh.remove_doubles", "text": "Merge By Distance", "props": {}},
+        ],
+    })
+    config.save(_menu_data)
+
+    _PieStub = type("PieStub", (), {
+        "__init__": lambda self: (setattr(self, "menus", []), setattr(self, "ops", []))[0],
+        "menu_pie": lambda self: self,
+        "menu": lambda self, idname, **kwargs: self.menus.append(idname),
+        "operator": lambda self, idname, **kwargs: self.ops.append(idname),
+        "label": lambda self, **kwargs: None,
+        "separator": lambda self: None,
+    })
+    _stub = _PieStub()
+    _host = type("Host", (), {})()
+    _host.layout = _stub
+    _old_state = dict(pie_mod.PIE_STATE)
+    pie_mod.PIE_STATE["pie_id"] = _menu_pie["id"]
+    pie_mod.PIEBIND_MT_pie.draw(_host, bpy.context)
+    _children_state = dict(pie_mod.PIE_STATE.get("children") or {})
+    pie_mod.PIE_STATE.clear()
+    pie_mod.PIE_STATE.update(_old_state)
+    check("菜单槽位画成子菜单", _stub.menus == ["PIEBIND_MT_sub_4"], _stub.menus)
+    check("子项登记到状态", len(_children_state.get(4) or []) == 2, _children_state.get(4))
+
+    _StubOps = type("StubOps", (), {
+        "__init__": lambda self: (setattr(self, "ops", []), setattr(self, "labels", []))[0],
+        "operator": lambda self, idname, **kwargs: self.ops.append(idname),
+        "label": lambda self, **kwargs: None,
+        "separator": lambda self: None,
+    })
+    _sub_host = type("Host", (), {})()
+    _sub_host.layout = _StubOps()
+    _sub_state = dict(pie_mod.PIE_STATE)
+    pie_mod.PIE_STATE["children"] = {4: [
+        {"idname": "mesh.delete", "text": "Only Faces", "props": {"type": "ONLY_FACE"}},
+        {"idname": "mesh.remove_doubles", "text": "Merge", "props": {}},
+    ]}
+    pie_mod.SUBMENU_CLASSES[4].draw(_sub_host, bpy.context)
+    pie_mod.PIE_STATE.clear()
+    pie_mod.PIE_STATE.update(_sub_state)
+    check("子菜单类画出子项", _sub_host.layout.ops == ["mesh.delete", "mesh.remove_doubles"],
+          _sub_host.layout.ops)
+
+    wm.piebind_pie = _menu_pie["id"]
+    wm.piebind_slot_pos = "NW"
+    wm.piebind_edit_mode = ""
+    wm.piebind_op_choice = "mesh.merge"
+    wm.piebind_slot_props = '{"type": "COLLAPSE"}'
+    wm.piebind_slot_text = "Collapse"
+    _add_result = bpy.ops.piebind.add_sub_item()
+    _slot_after_add = config.find_pie(config.load(), _menu_pie["id"])["slots"]["NW"]
+    check("加入子项",
+          _add_result == {"FINISHED"} and len(_slot_after_add.get("children") or []) == 3,
+          len(_slot_after_add.get("children") or []))
+    bpy.ops.piebind.remove_sub_item(index=2)
+    _slot_after_remove = config.find_pie(config.load(), _menu_pie["id"])["slots"]["NW"]
+    check("移除子项", len(_slot_after_remove.get("children") or []) == 2,
+          _slot_after_remove.get("children"))
+    bpy.ops.piebind.remove_sub_item(index=0)
+    bpy.ops.piebind.remove_sub_item(index=0)
+    _slot_empty = config.find_pie(config.load(), _menu_pie["id"])["slots"]["NW"]
+    check("子项清空后退回操作符", _slot_empty.get("kind") == "operator"
+          and not _slot_empty.get("children"), _slot_empty)
+    wm.piebind_pie = auto_pie["id"]
+    wm.piebind_slot_pos = "N"
     wm.piebind_slot_props = '{"type": "BACK"}'
     _common._AUTOSAVE_TIMER["pending"] = True
     _flushed = _common.flush_pending_save(wm)

@@ -32,7 +32,7 @@ class PIEBIND_AP_Preferences(bpy.types.AddonPreferences):
 
 CLASSES = (
     pie.PIEBIND_MT_pie,
-) + ui.CLASSES + ops.CLASSES + (PIEBIND_AP_Preferences,)
+) + pie.SUBMENU_CLASSES + ui.CLASSES + ops.CLASSES + (PIEBIND_AP_Preferences,)
 
 _timer_registered = False
 

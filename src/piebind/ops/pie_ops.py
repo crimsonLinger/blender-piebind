@@ -284,3 +284,82 @@ class PIEBIND_OT_call_pie(bpy.types.Operator):
 
     def execute(self, context):
         return self.invoke(context, None)
+
+
+class PIEBIND_OT_add_sub_item(bpy.types.Operator):
+    bl_idname = "piebind.add_sub_item"
+    bl_label = "加入子项"
+    bl_description = "把编辑区当前的操作符（含参数）加入该槽位的子菜单"
+    bl_options = {"REGISTER", "INTERNAL"}
+
+    def execute(self, context):
+        wm = context.window_manager
+        flush_pending_save(wm)
+        idname = getattr(wm, "piebind_op_choice", "")
+        if not idname or not ke.has_operator(idname):
+            self.report({"INFO"}, "先在编辑区选一个操作符")
+            return {"CANCELLED"}
+        pie_id = getattr(wm, "piebind_pie", "")
+        pos = getattr(wm, "piebind_slot_pos", "N")
+        data = config.load()
+        pie_data = config.find_pie(data, pie_id)
+        if pie_data is None:
+            return {"CANCELLED"}
+        slot = dict((pie_data.get("slots") or {}).get(pos) or {})
+        props = {}
+        raw = (getattr(wm, "piebind_slot_props", "") or "").strip()
+        if raw:
+            try:
+                parsed = json.loads(raw)
+            except Exception:
+                parsed = None
+            if isinstance(parsed, dict):
+                props = parsed
+        child = {
+            "idname": idname,
+            "text": (getattr(wm, "piebind_slot_text", "") or "").strip()
+            or ke.operator_label_zh(idname),
+            "props": props,
+        }
+        children = list(slot.get("children") or [])
+        children.append(child)
+        slot["kind"] = "menu"
+        slot["children"] = children
+        if not slot.get("idname"):
+            slot["idname"] = idname
+        config.set_slot(data, pie_id, pos, slot)
+        config.save(data)
+        wm.piebind_status = f"子项已加入（{len(children)}）"
+        return {"FINISHED"}
+
+
+class PIEBIND_OT_remove_sub_item(bpy.types.Operator):
+    bl_idname = "piebind.remove_sub_item"
+    bl_label = "移除子项"
+    bl_options = {"REGISTER", "INTERNAL"}
+
+    index: bpy.props.IntProperty(default=-1)
+
+    def execute(self, context):
+        wm = context.window_manager
+        flush_pending_save(wm)
+        pie_id = getattr(wm, "piebind_pie", "")
+        pos = getattr(wm, "piebind_slot_pos", "N")
+        data = config.load()
+        pie_data = config.find_pie(data, pie_id)
+        if pie_data is None:
+            return {"CANCELLED"}
+        slot = dict((pie_data.get("slots") or {}).get(pos) or {})
+        children = list(slot.get("children") or [])
+        if not (0 <= self.index < len(children)):
+            return {"CANCELLED"}
+        children.pop(self.index)
+        if children:
+            slot["children"] = children
+        else:
+            slot.pop("children", None)
+            slot["kind"] = "operator"
+        config.set_slot(data, pie_id, pos, slot)
+        config.save(data)
+        wm.piebind_status = f"已移除子项（剩 {len(children)}）"
+        return {"FINISHED"}

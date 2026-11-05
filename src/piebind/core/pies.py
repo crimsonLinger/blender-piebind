@@ -87,6 +87,46 @@ def variant_for(slot, mode):
             return variant
     return None
 
+
+# ------------------------------------------------------------ 子菜单（多功能槽位）
+# 一个槽位除了单个操作符，也可以挂一组操作符，画成子菜单（点开后在饼侧边展开一列）。
+SUB_ID = "PIEBIND_MT_sub_{index}"
+
+
+def _make_submenu_class(index):
+    def draw(self, context):
+        layout = self.layout
+        rows = (PIE_STATE.get("children") or {}).get(index) or []
+        if not rows:
+            layout.label(text="（没有子项）")
+            return
+        for row in rows:
+            idname = row.get("idname") or ""
+            if not ke.has_operator(idname):
+                continue
+            op = layout.operator(
+                idname, text=row.get("text") or ke.operator_label_zh(idname)
+            )
+            for prop, value in (row.get("props") or {}).items():
+                try:
+                    setattr(op, prop, value)
+                except Exception:
+                    continue
+
+    return type(
+        f"PIEBIND_MT_sub_{index}",
+        (bpy.types.Menu,),
+        {
+            "bl_idname": SUB_ID.format(index=index),
+            "bl_label": f"子菜单 {index + 1}",
+            "__module__": __name__,
+            "draw": draw,
+        },
+    )
+
+
+SUBMENU_CLASSES = tuple(_make_submenu_class(index) for index in range(8))
+
 _ICON_CACHE = {"set": None}
 
 
@@ -112,7 +152,7 @@ def safe_icon(icon):
     return icon
 
 
-def _draw_slot(layout, slot, context):
+def _draw_slot(layout, slot, context, pos="N"):
     # 同一槽位可以按模式存多个变体，这里取当前模式对应的那一份
     slot = slot_for_mode(slot, getattr(context, "mode", "")) if slot else None
     if not slot:
@@ -120,6 +160,19 @@ def _draw_slot(layout, slot, context):
         return
 
     kind = slot.get("kind", "operator")
+    if kind == "menu":
+        rows = slot.get("children") or []
+        if not rows:
+            # 子项为空时退化成普通操作符，避免饼里出现空条目
+            kind = "operator"
+        else:
+            index = SLOT_ORDER.index(pos) if pos in SLOT_ORDER else 0
+            layout.menu(
+                SUB_ID.format(index=index),
+                text=slot.get("text") or "子菜单",
+                icon=safe_icon(slot.get("icon")),
+            )
+            return
     if kind != "operator":
         layout.label(text=str(slot.get("text") or kind))
         return
@@ -162,6 +215,13 @@ class PIEBIND_MT_pie(bpy.types.Menu):
         if not any(slots.get(pos) for pos in SLOT_ORDER):
             pie.label(text="（这个饼还没有内容）", icon="INFO")
             return
+        # 子菜单槽位：按位置把子项登记到 PIE_STATE，供 8 个静态子菜单类绘制
+        children = {}
+        for index, pos in enumerate(SLOT_ORDER):
+            resolved = slot_for_mode(slots.get(pos), context.mode) if slots.get(pos) else None
+            if resolved and resolved.get("kind") == "menu":
+                children[index] = resolved.get("children") or []
+        PIE_STATE["children"] = children
         for pos in SLOT_ORDER:
             slot = slots.get(pos)
             if debug:
@@ -170,4 +230,4 @@ class PIEBIND_MT_pie(bpy.types.Menu):
                         fh.write(f"SLOT {pos} {'empty' if not slot else slot.get('idname')}\n")
                 except Exception:
                     pass
-            _draw_slot(pie, slot, context)
+            _draw_slot(pie, slot, context, pos)

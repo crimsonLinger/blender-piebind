@@ -238,6 +238,26 @@ def _draw_pies(layout, wm, data):
     row.menu("PIEBIND_MT_slot_presets", text=menu_text, icon="PRESET")
     editor.prop(wm, "piebind_slot_props", text="属性 JSON")
 
+    _editor_slot = (current.get("slots") or {}).get(wm.piebind_slot_pos) or {}
+    _resolved_slot = pie.slot_for_mode(_editor_slot, wm.piebind_edit_mode) or {}
+    _children = _resolved_slot.get("children") or []
+    if not wm.piebind_edit_mode:
+        editor.operator(
+            "piebind.add_sub_item", text="＋ 当前操作符加入子项（变成展开菜单）", icon="ADD"
+        )
+    if _children:
+        sub_box = editor.box()
+        sub_box.label(
+            text=f"子项（{len(_children)}）：点开饼时在侧边展开", icon="PRESET"
+        )
+        for _index, _child in enumerate(_children):
+            child_row = sub_box.row(align=True)
+            child_row.label(
+                text=f"{_child.get('text') or _child.get('idname')}"
+            )
+            op = child_row.operator("piebind.remove_sub_item", text="", icon="X")
+            op.index = _index
+
 
 # ---------------------------------------------------------------- 设置
 def _draw_settings(layout, wm, data):

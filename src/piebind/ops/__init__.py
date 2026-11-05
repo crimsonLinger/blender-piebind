@@ -49,12 +49,14 @@ from .pickers import (
 from .presets import PIEBIND_MT_slot_presets, PIEBIND_OT_apply_slot_preset
 from .pie_ops import (
     PIEBIND_OT_add_slot,
+    PIEBIND_OT_add_sub_item,
     PIEBIND_OT_call_pie,
     PIEBIND_OT_create_pie,
     PIEBIND_OT_delete_pie,
     PIEBIND_OT_load_slot,
     PIEBIND_OT_remove_edit_variant,
     PIEBIND_OT_remove_slot,
+    PIEBIND_OT_remove_sub_item,
     PIEBIND_OT_rename_pie,
     PIEBIND_OT_select_edit_mode,
     PIEBIND_OT_select_slot,
@@ -97,6 +99,8 @@ CLASSES = (
     PIEBIND_OT_delete_pie,
     PIEBIND_OT_add_slot,
     PIEBIND_OT_remove_slot,
+    PIEBIND_OT_add_sub_item,
+    PIEBIND_OT_remove_sub_item,
     PIEBIND_OT_select_slot,
     PIEBIND_OT_load_slot,
     PIEBIND_OT_test_pie,
