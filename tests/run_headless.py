@@ -409,6 +409,11 @@ def main():
     check("模式预设非空", len(mode_rows) >= 6, len(mode_rows))
     check("未知操作符无预设", preset_mod.presets_for("piebind.nope") == [])
     check("无枚举参数的操作符无预设", preset_mod.presets_for("wm.context_toggle") == [])
+    hide_rows = preset_mod.presets_for("object.hide_view_set")
+    check("隐藏操作符带布尔预设",
+          len(hide_rows) == 2 and hide_rows[1]["props"] == {"unselected": True}, hide_rows)
+    bool_rows = preset_mod.presets_for("view3d.view_all")
+    check("布尔参数自动生成预设", len(bool_rows) >= 2, bool_rows[:2])
     check("预设菜单已注册", hasattr(bpy.types, "PIEBIND_MT_slot_presets"))
     wm.piebind_op_choice = ""
     wm.piebind_slot_text = ""
@@ -418,6 +423,11 @@ def main():
     check("预设写入属性 JSON", json.loads(wm.piebind_slot_props or "{}") == {"type": "LEFT"},
           wm.piebind_slot_props)
     check("预设补上文字", wm.piebind_slot_text == "左视图", wm.piebind_slot_text)
+    wm.piebind_op_choice = "view3d.view_all"
+    wm.piebind_slot_text = "自定义文字"
+    bpy.ops.piebind.apply_slot_preset(
+        op_id="view3d.view_all", props_json='{"use_all_regions": false}', slot_text="")
+    check("无文字的预设不覆盖文字", wm.piebind_slot_text == "自定义文字", wm.piebind_slot_text)
     check("已移除「模式」快捷字段", not hasattr(bpy.types.WindowManager, "piebind_slot_mode"))
 
     # 写入槽位：只走「操作符 + 属性 JSON」，不再有模式覆盖

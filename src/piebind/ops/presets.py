@@ -42,7 +42,7 @@ class PIEBIND_OT_apply_slot_preset(bpy.types.Operator):
             autofilled.add(ke.operator_label(idname))
         except Exception:
             pass
-        if not current or current in autofilled:
+        if self.slot_text and (not current or current in autofilled):
             wm.piebind_slot_text = self.slot_text
 
         wm.piebind_status = f"参数预设已填入：{self.slot_text or idname}"

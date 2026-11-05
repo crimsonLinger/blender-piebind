@@ -25,6 +25,14 @@ STATIC = {
         ("WEIGHT_PAINT", "权重绘制", {"mode": "WEIGHT_PAINT"}),
         ("TEXTURE_PAINT", "纹理绘制", {"mode": "TEXTURE_PAINT"}),
     ],
+    "object.hide_view_set": [
+        ("SELECTED", "隐藏所选（H）", {"unselected": False}),
+        ("UNSELECTED", "隐藏未选中（Shift+H）", {"unselected": True}),
+    ],
+    "object.hide_view_clear": [
+        ("ALL", "显示全部（Alt+H）", {}),
+        ("ALL_SELECT", "显示全部并选中", {"select": True}),
+    ],
 }
 
 
@@ -40,8 +48,8 @@ def static_presets(idname):
     return rows
 
 
-def enum_presets(idname, max_items=16, max_props=2):
-    """从操作符的 RNA 枚举属性反推可选参数（冷门操作符的兜底）。"""
+def rna_presets(idname, max_items=16, max_props=2):
+    """从操作符的 RNA 属性反推可选参数（枚举 + 布尔），作为冷门操作符的兜底。"""
     if not idname or "." not in idname:
         return []
     mod_name, op_name = idname.split(".", 1)
@@ -53,7 +61,19 @@ def enum_presets(idname, max_items=16, max_props=2):
     rows = []
     used_props = 0
     for prop in rna.properties:
-        if prop.type != "ENUM" or prop.identifier == "rna_type":
+        if prop.identifier == "rna_type" or used_props >= max_props:
+            continue
+        if prop.type == "BOOLEAN":
+            used_props += 1
+            for value, suffix in ((False, "否"), (True, "是")):
+                rows.append({
+                    "key": f"{prop.identifier}:{str(value).lower()}",
+                    "label": f"{prop.name}：{suffix}",
+                    "text": "",
+                    "props": {prop.identifier: value},
+                })
+            continue
+        if prop.type != "ENUM":
             continue
         try:
             items = list(prop.enum_items)
@@ -61,8 +81,6 @@ def enum_presets(idname, max_items=16, max_props=2):
             continue
         if not items or len(items) > max_items:
             continue
-        if used_props >= max_props:
-            break
         used_props += 1
         for item in items:
             rows.append({
@@ -77,7 +95,7 @@ def enum_presets(idname, max_items=16, max_props=2):
 def presets_for(idname):
     """返回某项操作符可用的参数预设；没有则返回空列表。"""
     rows = static_presets(idname)
-    return rows if rows else enum_presets(idname)
+    return rows if rows else rna_presets(idname)
 
 
 def label_for(idname, props):
