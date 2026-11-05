@@ -289,6 +289,7 @@ def smoke_menus():
         ("PIEBIND_MT_operators", piebind.ops.PIEBIND_MT_operators),
         ("PIEBIND_MT_op_prefixes", piebind.ops.PIEBIND_MT_op_prefixes),
         ("PIEBIND_MT_op_prefixes_all", piebind.ops.PIEBIND_MT_op_prefixes_all),
+        ("PIEBIND_MT_edit_modes", piebind.ops.PIEBIND_MT_edit_modes),
         ("PIEBIND_MT_keymaps", piebind.ops.PIEBIND_MT_keymaps),
         ("PIEBIND_MT_slot_presets", piebind.ops.PIEBIND_MT_slot_presets),
     ]

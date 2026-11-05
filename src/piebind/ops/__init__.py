@@ -35,6 +35,7 @@ from .diag import PIEBIND_OT_copy_diagnostics, PIEBIND_OT_export_diagnostics
 from .dispatch import PIEBIND_OT_dispatch, PIEBIND_OT_slot_missing
 from .sidekeys import (PIEBIND_OT_arm_side_listener, PIEBIND_OT_side_listener, register_side_keymap, unregister_side_keymap)
 from .pickers import (
+    PIEBIND_MT_edit_modes,
     PIEBIND_MT_keymaps,
     PIEBIND_MT_operators,
     PIEBIND_MT_op_prefixes,
@@ -52,8 +53,10 @@ from .pie_ops import (
     PIEBIND_OT_create_pie,
     PIEBIND_OT_delete_pie,
     PIEBIND_OT_load_slot,
+    PIEBIND_OT_remove_edit_variant,
     PIEBIND_OT_remove_slot,
     PIEBIND_OT_rename_pie,
+    PIEBIND_OT_select_edit_mode,
     PIEBIND_OT_select_slot,
     PIEBIND_OT_test_pie,
 )
@@ -70,10 +73,13 @@ CLASSES = (
     PIEBIND_MT_operators,
     PIEBIND_MT_op_prefixes,
     PIEBIND_MT_op_prefixes_all,
+    PIEBIND_MT_edit_modes,
     PIEBIND_MT_slot_presets,
     PIEBIND_OT_select_keymap,
     PIEBIND_OT_select_pie,
     PIEBIND_OT_select_op_prefix,
+    PIEBIND_OT_select_edit_mode,
+    PIEBIND_OT_remove_edit_variant,
     PIEBIND_OT_pick_operator,
     PIEBIND_OT_apply_slot_preset,
     # 捕获

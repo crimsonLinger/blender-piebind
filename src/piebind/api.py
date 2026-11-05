@@ -19,7 +19,7 @@ import json
 
 import bpy
 
-from .core import config, keymap as ke
+from .core import config, keymap as ke, pies as pie
 from . import ops
 
 API_VERSION = 1
@@ -109,12 +109,26 @@ def create_pie(label="新建饼", slots=None):
             continue
         if not ke.has_operator(idname):
             return _err("OP_NOT_FOUND", f"操作符不存在：{idname}", "试试 api.call('search_operators', query=...)")
-        config.set_slot(data, created["id"], pos, {
+        payload = {
             "kind": "operator",
             "idname": idname,
             "text": slot.get("text") or "",
             "props": slot.get("props") or {},
-        })
+        }
+        variants = []
+        for variant in slot.get("variants") or []:
+            mode = pie.normalize_mode(variant.get("mode"))
+            variant_id = variant.get("idname") or ""
+            if mode and ke.has_operator(variant_id):
+                variants.append({
+                    "mode": mode,
+                    "idname": variant_id,
+                    "text": variant.get("text") or "",
+                    "props": variant.get("props") or {},
+                })
+        if variants:
+            payload["variants"] = variants
+        config.set_slot(data, created["id"], pos, payload)
     config.save(data)
     return _ok(created)
 

@@ -19,6 +19,10 @@ All notable changes to PieBind. This project follows [Semantic Versioning](https
   Chinese translation (e.g. `隐藏物体`, `框显全部`, `设置物体模式`) are found by Chinese search.
 - Operator search can be scoped to a module prefix (`object`, `view3d`, `mesh`, …), shown with
   a translated label (`物体`, `3D 视图`, `网格`, …); `全部` searches everything.
+- Pie slots can carry per-mode variants: the editor gets a `模式` selector (所有模式 / 物体 /
+  编辑 / 雕刻 / 顶点绘制 / 权重绘制 / 纹理绘制 / 姿态), and a slot draws the variant matching
+  the current mode, falling back to the base operator. One slot can therefore hide objects in
+  Object Mode and mesh elements in Edit Mode on the same `Shift+H`.
 
 ## [0.1.0] — 2026-11-05
 

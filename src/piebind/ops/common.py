@@ -64,32 +64,40 @@ ICON_ITEMS = [
 ]
 
 
-def load_slot_into_form(wm, pie_id=None, pos=None):
+def load_slot_into_form(wm, pie_id=None, pos=None, mode=None):
     """把某个槽位现有的内容读进编辑区；空槽则清空编辑区。
 
-    参数默认取当前选中的饼与方位。返回该槽位是否有内容。
+    参数默认取当前选中的饼、方位与「编辑模式」。当前模式没有变体时清空编辑区，
+    方便直接为这个模式新建一份。返回该槽位（或该模式变体）是否有内容。
     """
     pie_id = pie_id if pie_id is not None else getattr(wm, "piebind_pie", "")
     pos = pos if pos else getattr(wm, "piebind_slot_pos", "N")
+    mode = getattr(wm, "piebind_edit_mode", "") if mode is None else mode
     try:
         data = config.load()
     except Exception:
         return False
     pie_data = config.find_pie(data, pie_id)
     slot = ((pie_data or {}).get("slots") or {}).get(pos) or {}
+    resolved = pie.slot_for_mode(slot, mode) if mode else slot
+    if mode and not any(
+        pie.normalize_mode(v.get("mode")) == pie.normalize_mode(mode)
+        for v in (slot.get("variants") or [])
+    ):
+        resolved = {}
     cancel_pending_save()
     wm.piebind_suppress_save = True
     try:
-        wm.piebind_op_choice = slot.get("idname", "") or ""
-        wm.piebind_slot_text = slot.get("text", "") or ""
-        props = slot.get("props") or {}
+        wm.piebind_op_choice = (resolved or {}).get("idname", "") or ""
+        wm.piebind_slot_text = (resolved or {}).get("text", "") or ""
+        props = (resolved or {}).get("props") or {}
         wm.piebind_slot_props = json.dumps(props, ensure_ascii=False) if props else ""
-        wm.piebind_slot_icon = pie.safe_icon(slot.get("icon"))
+        wm.piebind_slot_icon = pie.safe_icon((resolved or {}).get("icon"))
     except Exception:
         return False
     finally:
         wm.piebind_suppress_save = False
-    return bool(slot)
+    return bool(resolved)
 
 
 # ---------------------------------------------------------------- 槽位自动保存
@@ -137,20 +145,38 @@ def save_current_slot(wm):
         props = parsed
 
     pos = getattr(wm, "piebind_slot_pos", "N")
-    slot = {
-        "kind": "operator",
+    text = (getattr(wm, "piebind_slot_text", "") or "").strip() or ke.operator_label_zh(idname)
+    payload = {
         "idname": idname,
-        "text": (getattr(wm, "piebind_slot_text", "") or "").strip()
-        or ke.operator_label_zh(idname),
+        "text": text,
         "icon": pie.safe_icon(getattr(wm, "piebind_slot_icon", "NONE")),
         "props": props,
     }
-    existing = (pie_data.get("slots") or {}).get(pos)
+    mode = pie.normalize_mode(getattr(wm, "piebind_edit_mode", ""))
+    existing = (pie_data.get("slots") or {}).get(pos) or {}
+    slot = dict(existing)
+    slot.pop("mode", None)
+    slot["kind"] = "operator"
+    if not mode or not slot.get("idname"):
+        # 编辑「所有模式」或基础槽位还空着时，写基础字段
+        slot.update(payload)
+    if mode:
+        variants = [
+            variant for variant in (existing.get("variants") or [])
+            if pie.normalize_mode(variant.get("mode")) != mode
+        ]
+        variants.append({"mode": mode, **payload})
+        variants.sort(key=lambda item: pie._MODE_KEYS.index(item.get("mode"))
+                      if item.get("mode") in pie._MODE_KEYS else 99)
+        slot["variants"] = variants
+    else:
+        slot.pop("variants", None)
     if existing == slot:
         return False
     config.set_slot(data, pie_id, pos, slot)
     config.save(data)
-    wm.piebind_status = f"已保存槽位 {pos}：{slot['text']}"
+    suffix = f"（{pie.mode_label(mode)}）" if mode else ""
+    wm.piebind_status = f"已保存槽位 {pos}{suffix}：{slot['text']}"
     return True
 
 
@@ -228,6 +254,9 @@ WM_PROPS = {
     ),
     "piebind_slot_pos": lambda: bpy.props.EnumProperty(
         name="方位", items=SLOT_POS_ITEMS, options={"SKIP_SAVE"},
+    ),
+    "piebind_edit_mode": lambda: bpy.props.StringProperty(
+        name="模式变体", default="", options={"SKIP_SAVE"},
     ),
     "piebind_slot_props": lambda: bpy.props.StringProperty(
         name="属性 JSON", default="", options={"SKIP_SAVE"},

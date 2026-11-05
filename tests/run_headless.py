@@ -527,6 +527,34 @@ def main():
     check("非饼页签不写盘", _common.save_current_slot(wm) is False)
     wm.piebind_tab = "pies"
 
+    section("模式变体")
+    check("模式标签归一", pie_mod.mode_label("EDIT_MESH") == "编辑模式",
+          pie_mod.mode_label("EDIT_MESH"))
+    wm.piebind_edit_mode = "EDIT"
+    wm.piebind_op_choice = "mesh.hide"
+    wm.piebind_slot_text = "隐藏"
+    wm.piebind_slot_props = '{"unselected": true}'
+    _variant_saved = _common.save_current_slot(wm)
+    _variant_slot = ((config.find_pie(config.load(), auto_pie["id"]) or {}).get("slots") or {}).get("N") or {}
+    _variants = _variant_slot.get("variants") or []
+    check("变体写入 variants",
+          _variant_saved and any(v.get("mode") == "EDIT" and v.get("idname") == "mesh.hide"
+                                 for v in _variants), _variant_slot)
+    check("基础槽位不被变体覆盖",
+          _variant_slot.get("idname") == "view3d.view_axis", _variant_slot.get("idname"))
+    check("编辑模式解析到变体",
+          pie_mod.slot_for_mode(_variant_slot, "EDIT_MESH")["idname"] == "mesh.hide")
+    check("其他模式仍用基础槽位",
+          pie_mod.slot_for_mode(_variant_slot, "OBJECT")["idname"] == "view3d.view_axis")
+    bpy.ops.piebind.load_slot()
+    check("载入读回当前模式变体", wm.piebind_op_choice == "mesh.hide", wm.piebind_op_choice)
+    bpy.ops.piebind.remove_edit_variant()
+    _after_remove = ((config.find_pie(config.load(), auto_pie["id"]) or {}).get("slots") or {}).get("N") or {}
+    check("删除变体后回落基础",
+          not _after_remove.get("variants")
+          and _after_remove.get("idname") == "view3d.view_axis"
+          and wm.piebind_edit_mode == "", _after_remove)
+
     wm.piebind_slot_props = '{"type": "BACK"}'
     _common._AUTOSAVE_TIMER["pending"] = True
     _flushed = _common.flush_pending_save(wm)

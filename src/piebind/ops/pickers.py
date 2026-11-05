@@ -63,8 +63,27 @@ class PIEBIND_OT_select_pie(bpy.types.Operator):
         wm = context.window_manager
         flush_pending_save(wm)
         wm.piebind_pie = self.pie_id
+        wm.piebind_edit_mode = ""
         load_slot_into_form(wm, pie_id=self.pie_id)
         return {"FINISHED"}
+
+
+class PIEBIND_MT_edit_modes(bpy.types.Menu):
+    bl_label = "编辑模式"
+    bl_idname = "PIEBIND_MT_edit_modes"
+
+    def draw(self, context):
+        layout = self.layout
+        current = pie.normalize_mode(
+            getattr(context.window_manager, "piebind_edit_mode", "")
+        )
+        for key, label in pie.MODE_ITEMS:
+            op = layout.operator(
+                "piebind.select_edit_mode",
+                text=label,
+                icon="CHECKMARK" if key == current else "DOT",
+            )
+            op.mode = key
 
 
 class PIEBIND_MT_keymaps(bpy.types.Menu):

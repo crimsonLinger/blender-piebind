@@ -5,6 +5,30 @@
 
 每轮迭代追加：`## 日期 · 第N轮：一句话主题`，末尾写「当前状态 / 下一步 / 未验证」。
 
+## 2026-11-06 · 第45轮：槽位按模式变体（同一位置多套操作符）
+
+### 反馈
+- 「不能为一个饼菜单中的快捷键添加多个绑定吗，例如隐藏按键都是 Shift+H，每个模式中都一样」——
+  选中方案 A：同一槽位按当前模式自动切换操作符。
+
+### 设计
+- 槽位新增可选 `variants: [{mode, idname, text, icon, props}]`；基础槽位仍是「所有模式」的回落。
+- 解析：`pies.slot_for_mode(slot, context.mode)`，`context.mode` 先归一（`EDIT_MESH` → `EDIT`）。
+
+### 改动
+- `core/pies.py`：`MODE_ITEMS` / `normalize_mode()` / `mode_label()` / `slot_for_mode()`；`_draw_slot` 按模式取变体。
+- `ops/common.py`：WM 属性 `piebind_edit_mode`；`load_slot_into_form(..., mode)` 读变体（无变体则清空供新建）；
+  `save_current_slot` 按模式写 `variants`，且不覆盖基础槽位。
+- `ops/pie_ops.py`：`select_edit_mode`、`remove_edit_variant`；切槽位/切饼时重置模式。
+- `ops/pickers.py` + `ui/prefs.py`：`PIEBIND_MT_edit_modes` 菜单与「模式：编辑模式」一行按钮 + 「删除该模式」。
+- `api.py`：`create_pie` 的槽位支持 `variants`。
+
+### 验证
+- headless **145/145**（新增：模式归一、变体写入、基础不被覆盖、模式解析、读回、删除回落）；
+- 冒烟 **42 OK / 0 FAIL**（模式菜单 8 项）；
+- GUI 实测：`PIEBIND_MT_pie.draw` 在 OBJECT 画出 `object.hide_view_set`，切到 EDIT_MESH 后画出 `mesh.hide`；
+  面板截图确认「模式：编辑模式 + 隐藏选中项 [H / SHIFT+H] + Unselected：是」。
+
 ## 2026-11-06 · 第44轮：操作符搜索加「范围」前缀过滤
 
 ### 反馈

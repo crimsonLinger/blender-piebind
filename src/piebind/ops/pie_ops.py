@@ -179,9 +179,60 @@ class PIEBIND_OT_select_slot(bpy.types.Operator):
     def execute(self, context):
         wm = context.window_manager
         flush_pending_save(wm)
+        wm.piebind_edit_mode = ""
         wm.piebind_slot_pos = self.pos
         # 值没变时枚举的 update 回调不会触发，这里再显式读一次
         load_slot_into_form(wm, pos=self.pos)
+        return {"FINISHED"}
+
+
+class PIEBIND_OT_select_edit_mode(bpy.types.Operator):
+    bl_idname = "piebind.select_edit_mode"
+    bl_label = "切换模式变体"
+    bl_description = "切到该模式的变体进行编辑（没有则新建一份）"
+    bl_options = {"REGISTER", "INTERNAL"}
+
+    mode: bpy.props.StringProperty()
+
+    def execute(self, context):
+        wm = context.window_manager
+        flush_pending_save(wm)
+        wm.piebind_edit_mode = self.mode
+        load_slot_into_form(wm)
+        return {"FINISHED"}
+
+
+class PIEBIND_OT_remove_edit_variant(bpy.types.Operator):
+    bl_idname = "piebind.remove_edit_variant"
+    bl_label = "删除该模式变体"
+    bl_description = "删除当前模式的变体，回落到「所有模式」的基础绑定"
+    bl_options = {"REGISTER", "INTERNAL"}
+
+    def execute(self, context):
+        wm = context.window_manager
+        mode = pie.normalize_mode(getattr(wm, "piebind_edit_mode", ""))
+        if not mode:
+            return {"CANCELLED"}
+        data = config.load()
+        pie_id = getattr(wm, "piebind_pie", "")
+        pos = getattr(wm, "piebind_slot_pos", "N")
+        pie_data = config.find_pie(data, pie_id)
+        slot = ((pie_data or {}).get("slots") or {}).get(pos)
+        if not slot:
+            return {"CANCELLED"}
+        variants = [
+            variant for variant in (slot.get("variants") or [])
+            if pie.normalize_mode(variant.get("mode")) != mode
+        ]
+        if variants:
+            slot["variants"] = variants
+        else:
+            slot.pop("variants", None)
+        config.set_slot(data, pie_id, pos, slot)
+        config.save(data)
+        wm.piebind_edit_mode = ""
+        load_slot_into_form(wm)
+        wm.piebind_status = f"已删除 {pie.mode_label(mode)} 变体"
         return {"FINISHED"}
 
 

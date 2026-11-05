@@ -200,6 +200,16 @@ def _draw_pies(layout, wm, data):
     op.pie_id = current["id"]
     op.pos = wm.piebind_slot_pos
 
+    mode_row = editor.row(align=True)
+    mode_row.menu(
+        "PIEBIND_MT_edit_modes",
+        text=f"模式：{pie.mode_label(wm.piebind_edit_mode)}",
+    )
+    if wm.piebind_edit_mode:
+        mode_row.operator(
+            "piebind.remove_edit_variant", text="删除该模式", icon="X"
+        )
+
     pickers.operator_picker(editor, wm)
 
     row = editor.row(align=True)

@@ -28,6 +28,51 @@ SLOT_LABELS = {
 # 当前要绘制的饼（由 piebind.call_pie 在调用前写入）
 PIE_STATE = {"pie_id": None}
 
+# ------------------------------------------------------------ 按模式切换的变体
+MODE_ITEMS = (
+    ("", "所有模式"),
+    ("OBJECT", "物体模式"),
+    ("EDIT", "编辑模式"),
+    ("SCULPT", "雕刻模式"),
+    ("VERTEX_PAINT", "顶点绘制"),
+    ("WEIGHT_PAINT", "权重绘制"),
+    ("TEXTURE_PAINT", "纹理绘制"),
+    ("POSE", "姿态模式"),
+)
+
+_MODE_KEYS = [key for key, _label in MODE_ITEMS]
+
+
+def normalize_mode(mode):
+    """把 context.mode（EDIT_MESH / EDIT_ARMATURE …）归一成 EDIT 这类大类。"""
+    text = str(mode or "").upper()
+    if text.startswith("EDIT"):
+        return "EDIT"
+    return text
+
+
+def mode_label(mode):
+    mode = normalize_mode(mode)
+    for key, label in MODE_ITEMS:
+        if key == mode:
+            return label
+    return mode or "所有模式"
+
+
+def slot_for_mode(slot, mode):
+    """取当前模式应使用的槽位内容：模式变体优先，否则退回基础槽位。"""
+    if not slot:
+        return None
+    mode = normalize_mode(mode)
+    base = {key: value for key, value in slot.items() if key != "variants"}
+    if mode:
+        for variant in slot.get("variants") or []:
+            if normalize_mode(variant.get("mode")) == mode:
+                merged = dict(base)
+                merged.update({k: v for k, v in variant.items() if k != "mode"})
+                return merged
+    return base
+
 _ICON_CACHE = {"set": None}
 
 
@@ -54,6 +99,8 @@ def safe_icon(icon):
 
 
 def _draw_slot(layout, slot, context):
+    # 同一槽位可以按模式存多个变体，这里取当前模式对应的那一份
+    slot = slot_for_mode(slot, getattr(context, "mode", "")) if slot else None
     if not slot:
         layout.separator()
         return
@@ -64,6 +111,9 @@ def _draw_slot(layout, slot, context):
         return
 
     idname = slot.get("idname") or ""
+    if not idname:
+        layout.separator()
+        return
     text = slot.get("text") or ke.operator_label_zh(idname)
     icon = safe_icon(slot.get("icon"))
 
